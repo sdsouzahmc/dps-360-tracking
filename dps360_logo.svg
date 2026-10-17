@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="44" viewBox="0 0 240 44">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5B6CF0"/><stop offset="1" stop-color="#3D4FD6"/></linearGradient></defs>
+  <rect x="2" y="4" width="36" height="36" rx="10" fill="url(#g)"/>
+  <circle cx="20" cy="22" r="10.5" fill="none" stroke="#fff" stroke-width="2.4" stroke-dasharray="52 14" transform="rotate(-60 20 22)"/>
+  <circle cx="20" cy="22" r="3.6" fill="#fff"/>
+  <text x="48" y="25" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="22" font-weight="800" fill="#FFFFFF">DPS <tspan fill="#8EA2FF">360</tspan></text>
+  <text x="49" y="39" font-family="Inter,Segoe UI,Helvetica,Arial,sans-serif" font-size="9.5" font-weight="600" fill="#AEB8E8">powered by AutoTrace</text>
+</svg>
