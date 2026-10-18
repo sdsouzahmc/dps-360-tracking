@@ -156,7 +156,8 @@ with tabs[10]:
                                             "Children": r["children"], "Scans": r["scans"]} for r in locked_]),
                              hide_index=True, width="stretch")
             if not runs_ and locked_:
-                st.info("Every matching trip is closed, so there is nothing that can be reset.")
+                st.info("Every matching trip is closed, so there is nothing that can be reset. To reset closed trips for testing, "
+                        "turn on 'Testing only: also reset closed trips' above.")
             elif not runs_:
                 st.info(f"No trips found for {D_}" + (f" · {next(b['bus_no'] for b in bl_ if b['id'] == rbus)}" if rbus else "")
                         + (f" · Trip {rtrip}" if rtrip else "") + ". Nothing to reset.")
@@ -181,7 +182,9 @@ with tabs[10]:
                 n, m, k = E.reset_trips(D_, user["username"], role, bus_id=rbus, trip_no=rtrip, parent_changes=also, include_closed=force)
                 st.session_state.rs_result = ("ok", f"Reset done for {D_}: {n} trip(s) removed"
                                             + (f", {m} absence/change request(s) removed" if also else "") + (f", {k} closed trip(s) kept" if k else "")
-                                            + ". The removed trip(s) can now be started again.")
+                                            + ". The removed trip(s) can now be started again."
+                                            + (" This bus is now kept for manual testing today: the simulated day will not start its "
+                                               "remaining trips." if rbus and D_ == db.today() else ""))
                 for k_ in ("rs_ok", "rs_pc", "rs_force"):
                     st.session_state.pop(k_, None)
                 st.rerun()

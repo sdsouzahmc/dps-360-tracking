@@ -749,6 +749,9 @@ _auto = st.toggle("🔄 Auto-refresh lists every 10 s (shows scans made on other
 
 @st.fragment(run_every=10 if _auto else None)
 def _lists_panel():
+    _r = E.get_run(run["id"])
+    if not offline and (not _r or _r["status"] not in ("IN_PROGRESS", "PENDING_SYNC")):
+        st.rerun()                       # trip closed elsewhere or reset by the office: back to today's list
     cur_stop = st.session_state.get(f"{K}_stop", SCHOOL_STOP)
     if is_driver:          # the driver does not pick a stop: highlight the children at the NEXT STOP
         _dn = st.session_state.get(f"{K}_drvnext")

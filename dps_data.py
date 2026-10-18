@@ -607,8 +607,14 @@ def _apply(con, events, notify=True, rnd=None):
             runs[k] = rr["id"] if rr and rr["status"] in ("IN_PROGRESS", "PENDING_SYNC") else None
         return runs[k]
 
+    try:
+        manual = set(json.loads(db.setting("manual_buses", "{}", con) or "{}").get(db.today(), []))
+    except ValueError:
+        manual = set()
     for when, kind, d in events:
         date = when.strftime("%Y-%m-%d")
+        if manual and d.get("bus_id") in manual and kind in ("RUN_START", "VCHECK", "VCLEAR", "INCIDENT") and date == db.today():
+            continue                     # bus handed to manual testing today
         try:
             if kind in ("ABSENCE", "ATT", "EP_DECIDE"):
                 lines.clear()

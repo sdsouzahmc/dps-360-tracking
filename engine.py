@@ -130,6 +130,11 @@ def reset_trips(date, user, role, bus_id=None, trip_no=None, parent_changes=Fals
             for tbl, rows in pc.items():
                 c.executemany(f"DELETE FROM {tbl} WHERE id=?", [(i,) for i in rows])
                 removed_pc += len(rows)
+        if bus_id and date == db.today():     # DPS 360: a bus reset for testing is left to the testers for the rest of the day
+            import json
+            mb = set(json.loads(db.setting("manual_buses", "{}", c) or "{}").get(date, []))
+            mb.add(int(bus_id))
+            db.set_setting("manual_buses", json.dumps({date: sorted(mb)}), c)
         bus_no = q1("SELECT bus_no FROM buses WHERE id=?", (bus_id,), c)["bus_no"] if bus_id else "all buses"
         scope = f"{date} · {bus_no} · {'Trip ' + str(trip_no) if trip_no else 'all trips'}"
         db.audit(user, role, "TRIP_DATA_RESET_FORCED" if include_closed else "TRIP_DATA_RESET", "trip_runs", date,
@@ -581,6 +586,8 @@ def manifest_for_student(stu, date, trip_no, con):
     for batch, grp, purpose in TRIPS[trip_no]["movements"]:
         if stu["batch"] == batch and stu["grp"] == grp:
             bus_id, stop_id = effective_assignment(stu, date, trip_no, con)
+            if not bus_id:                      # private-transport student: no bus for this trip
+                return None
             if purpose == "DROPOFF" and stop_id == stu["stop_id"] and stu.get("drop_stop_id"):
                 stop_id = stu["drop_stop_id"]
             return {"purpose": purpose, "bus_id": bus_id, "stop_id": stop_id, "bus_no": db.bus(bus_id, con)["bus_no"]}
