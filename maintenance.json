@@ -1,0 +1,6 @@
+{
+  "_help": "One-off test-support actions, applied once per database when the app starts. reset = remove all trips (incl. closed) of a bus for a date and keep the bus for manual testing that day.",
+  "actions": [
+    {"id": "reset-bus001-2026-10-18", "type": "reset", "bus": "BUS-001", "date": "2026-10-18"}
+  ]
+}

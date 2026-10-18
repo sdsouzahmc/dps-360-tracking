@@ -892,3 +892,29 @@ def real_time():
     """Demo clock back to real time: the day simply continues up to now."""
     db.set_clock_offset(0)
     return tick(db.now())
+
+
+def apply_maintenance(path=None):
+    """Apply one-off actions from maintenance.json (once per database)."""
+    import os
+    import engine as E
+    path = path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "maintenance.json")
+    if not os.path.exists(path):
+        return 0
+    try:
+        acts = json.load(open(path)).get("actions", [])
+    except ValueError:
+        return 0
+    done = set(json.loads(db.setting("maintenance_done", "[]") or "[]"))
+    n = 0
+    for a in acts:
+        if a.get("id") in done or a.get("date") != db.today():
+            continue
+        if a.get("type") == "reset":
+            b = q1("SELECT id FROM buses WHERE bus_no=?", (a["bus"],))
+            if b:
+                E.reset_trips(a["date"], "maintenance", "admin", bus_id=b["id"], include_closed=True)
+                n += 1
+        done.add(a["id"])
+    db.set_setting("maintenance_done", json.dumps(sorted(done)))
+    return n

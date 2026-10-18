@@ -26,6 +26,7 @@ def _boot():
 _boot()
 import dps_data   # noqa: E402
 dps_data.tick()   # the simulated school day moves on to the current time
+dps_data.apply_maintenance()   # one-off test-support actions (maintenance.json)
 
 st.markdown("""<style>
   :root { --navy:#1B2559; --indigo:#3D4FD6; --indigo-soft:#E9ECFC; --ink:#1A2036; --muted:#6B7390; --line:#E3E7F0;
