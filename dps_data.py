@@ -608,9 +608,9 @@ def _apply(con, events, notify=True, rnd=None):
         return runs[k]
 
     try:
-        manual = set(json.loads(db.setting("manual_buses", "{}", con) or "{}").get(db.today(), []))
+        manual = set(json.loads(db.setting("manual_buses", "{}", con) or "{}").get(db.today(), [])) | reserved_buses(con)
     except ValueError:
-        manual = set()
+        manual = reserved_buses(con)
     for when, kind, d in events:
         date = when.strftime("%Y-%m-%d")
         if manual and d.get("bus_id") in manual and kind in ("RUN_START", "VCHECK", "VCLEAR", "INCIDENT") and date == db.today():
@@ -783,6 +783,19 @@ def _apply(con, events, notify=True, rnd=None):
         except Exception as ex:      # one bad event must never stop the day
             con.execute("INSERT INTO settings(key, value) VALUES ('sim_last_error', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                         (f"{kind} {when}: {ex}",))
+
+
+def reserved_buses(con=None):
+    """Bus ids kept for manual testing every day (maintenance.json → reserved_buses)."""
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maintenance.json")
+    try:
+        names = json.load(open(path)).get("reserved_buses", [])
+    except (OSError, ValueError):
+        return set()
+    if not names:
+        return set()
+    return {r["id"] for r in q(f"SELECT id FROM buses WHERE bus_no IN ({','.join('?' * len(names))})", names, con)}
 
 
 def _noscan(con, sid, date):

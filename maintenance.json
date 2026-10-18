@@ -1,6 +1,8 @@
 {
-  "_help": "One-off test-support actions, applied once per database when the app starts. reset = remove all trips (incl. closed) of a bus for a date and keep the bus for manual testing that day.",
+  "_help": "Test-support settings. reserved_buses: the simulated school day never runs these buses (testers run them by hand, every day). actions: one-off actions applied once per database on that date.",
+  "reserved_buses": ["BUS-001", "BUS-026"],
   "actions": [
-    {"id": "reset-bus001-2026-10-18", "type": "reset", "bus": "BUS-001", "date": "2026-10-18"}
+    {"id": "reset-bus001-2026-10-18", "type": "reset", "bus": "BUS-001", "date": "2026-10-18"},
+    {"id": "reset-bus026-2026-10-18", "type": "reset", "bus": "BUS-026", "date": "2026-10-18"}
   ]
 }
