@@ -20,6 +20,8 @@ def _boot():
         db.init_db()
         import planner
         planner.ensure_schema()
+        import resets
+        resets.snapshot_assignment()      # original per-session bus plan, for "Reset bus assignments"
     return True
 
 

@@ -81,6 +81,8 @@ def generate(seed=26, history_days=4, now=None):
         con.close()
     import planner
     planner.ensure_schema()
+    import resets
+    resets.snapshot_assignment()
     for d in __import__("engine").school_days_back(history_days):
         apply_day(d, replay=True)
     prepare_today(now)

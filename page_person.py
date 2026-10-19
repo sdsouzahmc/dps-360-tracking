@@ -97,3 +97,14 @@ with right:
     with st.expander(f"📩 Messages sent to the parents ({len(msgs)})"):
         for m in msgs:
             st.markdown(f"`{m['ts'][11:16]}` {m['message']}")
+
+if st.session_state.user["role"] in ("admin", "manager"):
+    with st.expander("🧹 Test reset for this student"):
+        import resets as R_
+        pv = R_.student_preview(sid, day)
+        st.caption(f"Clean {s['name']}'s day ({day}): " + ", ".join(f"{k} {v}" for k, v in pv.items() if v) if any(pv.values()) else "Nothing recorded for this day.")
+        if st.checkbox("I understand this removes this student's test data for the day", key="p360_rs_ok") and \
+                st.button("Reset this student's day", type="primary", key="p360_rs"):
+            R_.reset_student(sid, day, st.session_state.user["username"])
+            st.success("Done — bus lines back to Expected; scans, marks, requests, alerts and messages removed.")
+            st.rerun()

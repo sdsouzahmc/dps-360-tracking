@@ -23,7 +23,7 @@ if "su_last" in st.session_state:
     lv, m = st.session_state.pop("su_last")
     msg(lv, m)
 
-tabs = st.tabs(["Data source", "Students", "Badges & ID cards", "Buses & crew", "Stops", "CSV import", "Devices", "Users", "Backup", "Demo tools", "Reset trip data"])
+tabs = st.tabs(["Data source", "Students", "Badges & ID cards", "Buses & crew", "Stops", "CSV import", "Devices", "Users", "Backup", "Demo tools", "Reset trip data", "Test resets"])
 
 
 def new_badge(sid, code):
@@ -188,3 +188,142 @@ with tabs[10]:
                 for k_ in ("rs_ok", "rs_pc", "rs_force"):
                     st.session_state.pop(k_, None)
                 st.rerun()
+
+
+# ------------------------------------------------------------------ test resets (DPS 360)
+with tabs[11]:
+    import campus as _cp
+    import dps_data as _dd
+    import resets as R_
+    st.markdown("**Test resets** — put anything back to a clean state when a test gets stuck. Every reset is recorded in the audit log. "
+                "Trip resets are on the previous tab.")
+    if "tr_msg" in st.session_state:
+        msg(*st.session_state.pop("tr_msg"))
+    if role not in ("admin", "manager"):
+        st.info("Only the administrator or transport lead can use test resets.")
+    else:
+        _D = st.date_input("Date", value=date.fromisoformat(db.today()), key="tr_date").isoformat()
+        what = st.segmented_control("Reset", ["Student", "Class attendance", "Bus (whole day)", "Vehicle check", "Staff", "Visitors",
+                                              "Early pickups", "Alerts", "Parent requests", "Bus assignments", "Whole day"],
+                                    default="Student", key="tr_what") or "Student"
+
+        def _confirm(key):
+            return st.checkbox("I understand this permanently removes the selected test data", key=f"tr_ok_{key}")
+
+        with st.container(border=True):
+            if what == "Student":
+                st.caption("Bus lines go back to Expected (scans removed); gate scans, class mark, absences, requests, early pickups, alerts "
+                           "and parent messages for that day are removed. Use it when a child is stuck On board, marked wrongly, etc.")
+                qtxt = st.text_input("Student name, ID (DPS…) or card number", key="tr_sq")
+                hits = db.q("""SELECT s.id, s.name, s.code, s.class_name, s.section FROM students s LEFT JOIN badges b ON b.student_id=s.id
+                               WHERE s.name LIKE ? OR s.code=? OR b.code=? GROUP BY s.id ORDER BY s.name LIMIT 30""",
+                            (f"%{qtxt.strip()}%", qtxt.strip().upper(), qtxt.strip())) if qtxt.strip() else []
+                if hits:
+                    sid_ = st.selectbox("Student", [h["id"] for h in hits], key="tr_sid",
+                                        format_func=lambda i: next(f"{h['name']} · {h['class_name']}-{h['section']} · {h['code']}" for h in hits if h["id"] == i))
+                    pv = R_.student_preview(sid_, _D)
+                    st.dataframe(pd.DataFrame([{"Item": k, "Records": v} for k, v in pv.items()]), hide_index=True, width="stretch")
+                    parts = st.multiselect("What to reset", list(pv), default=list(pv), key="tr_sparts")
+                    if st.button("Reset student", type="primary", disabled=not (_confirm("s") and parts), key="tr_sgo"):
+                        R_.reset_student(sid_, _D, user["username"], parts)
+                        st.session_state.tr_msg = ("ok", f"Student reset for {_D}: {', '.join(parts)}.")
+                        st.rerun()
+                elif qtxt.strip():
+                    st.caption("No student found.")
+            elif what == "Class attendance":
+                st.caption("Removes the class's submitted attendance, the alerts and parent messages it created and the 'absent (teacher)' bus "
+                           "absences — the teacher can take attendance again.")
+                cls_ = db.q("""SELECT c.id, c.name, c.section, s.name AS t, (SELECT ts FROM att_submissions a WHERE a.class_id=c.id AND a.date=?) sub
+                               FROM classes c LEFT JOIN staff s ON s.id=c.teacher_id ORDER BY c.shift, c.id""", (_D,))
+                cid_ = st.selectbox("Class", [c["id"] for c in cls_], key="tr_cid",
+                                    format_func=lambda i: next(f"{c['name']}-{c['section']} · {c['t']} · {'submitted ' + c['sub'][11:16] if c['sub'] else 'not submitted'}"
+                                                               for c in cls_ if c["id"] == i))
+                if st.button("Reset class attendance", type="primary", disabled=not _confirm("c"), key="tr_cgo"):
+                    n_ = R_.reset_class_attendance(cid_, _D, user["username"])
+                    st.session_state.tr_msg = ("ok", f"Class attendance reset ({n_} marks removed).")
+                    st.rerun()
+            elif what in ("Bus (whole day)", "Vehicle check"):
+                bl_ = db.buses()
+                bid_ = st.selectbox("Bus", [b["id"] for b in bl_], key="tr_bid", format_func=lambda i: next(b["bus_no"] for b in bl_ if b["id"] == i))
+                runs_ = db.q("SELECT trip_no, status FROM trip_runs WHERE bus_id=? AND date=? ORDER BY trip_no", (bid_, _D))
+                chk_ = db.q("SELECT kind, status, ts FROM vehicle_checks WHERE bus_id=? AND date=?", (bid_, _D))
+                st.caption(f"Trips on {_D}: " + (", ".join(f"Trip {r['trip_no']} {r['status'].lower()}" for r in runs_) or "none")
+                           + " · Vehicle checks: " + (", ".join(f"{c['kind'].lower()} {c['status'].lower()} {c['ts'][11:16]}" for c in chk_) or "none"))
+                if what == "Bus (whole day)":
+                    st.caption("Removes ALL trips of this bus for the day (including closed ones) with lists, scans, messages and incidents, plus its "
+                               "vehicle checks and office messages. The bus is then kept for manual testing for the rest of the day.")
+                    if st.button("Reset bus day", type="primary", disabled=not _confirm("b"), key="tr_bgo"):
+                        n_, nc_ = R_.reset_bus_day(bid_, _D, user["username"])
+                        st.session_state.tr_msg = ("ok", f"Bus reset: {n_} trip(s) and {nc_} vehicle check(s) removed. Start again with the pre-trip check.")
+                        st.rerun()
+                else:
+                    st.caption("Removes the bus's pre-/post-trip checks for the day (also clears a BLOCKED bus) — the driver checks again.")
+                    if st.button("Reset vehicle checks", type="primary", disabled=not _confirm("v"), key="tr_vgo"):
+                        n_ = R_.reset_vehicle_checks(bid_, _D, user["username"])
+                        st.session_state.tr_msg = ("ok", f"{n_} vehicle check(s) removed.")
+                        st.rerun()
+            elif what == "Staff":
+                qs = st.text_input("Staff name or card (EMP…)", key="tr_stq")
+                sh = db.q("SELECT id, name, card_no, role FROM staff WHERE name LIKE ? OR card_no=? LIMIT 30", (f"%{qs.strip()}%", qs.strip().upper())) if qs.strip() else []
+                if sh:
+                    stid = st.selectbox("Staff", [x["id"] for x in sh], key="tr_stid", format_func=lambda i: next(f"{x['name']} · {x['role']} · {x['card_no']}" for x in sh if x["id"] == i))
+                    if st.button("Reset staff gate scans", type="primary", disabled=not _confirm("st"), key="tr_stgo"):
+                        n_ = R_.reset_staff_day(stid, _D, user["username"])
+                        st.session_state.tr_msg = ("ok", f"{n_} gate scan(s) removed.")
+                        st.rerun()
+            elif what == "Visitors":
+                only = st.toggle("Only visitors still on campus", value=False, key="tr_vonly")
+                st.caption(f"{db.q1('SELECT COUNT(*) n FROM visitors WHERE date=?', (_D,))['n']} visitor(s) registered on {_D}.")
+                if st.button("Remove visitors", type="primary", disabled=not _confirm("vi"), key="tr_vigo"):
+                    n_ = R_.reset_visitors(_D, user["username"], only)
+                    st.session_state.tr_msg = ("ok", f"{n_} visitor(s) removed with their passes, gate scans and alerts.")
+                    st.rerun()
+            elif what == "Early pickups":
+                eps = _cp.early_pickups(_D)
+                opts = {None: f"All early pickups on {_D} ({len(eps)})"}
+                opts.update({e["student_id"]: f"{e['name']} · {e['class']} · {e['pickup_time']} · {e['status'].lower()}" for e in eps})
+                epk = st.selectbox("Which", list(opts), format_func=opts.get, key="tr_ep")
+                st.caption("Removes the request, its gate pass, its 'off the home bus' absence (child back on the bus list), gate exit, "
+                           "teacher notice and parent messages.")
+                if st.button("Reset early pickup(s)", type="primary", disabled=not _confirm("ep"), key="tr_epgo"):
+                    n_ = R_.reset_early_pickups(_D, user["username"], epk)
+                    st.session_state.tr_msg = ("ok", f"{n_} early-pickup request(s) removed.")
+                    st.rerun()
+            elif what == "Alerts":
+                kinds = sorted({a["kind"] for a in db.q("SELECT DISTINCT kind FROM campus_alerts WHERE date=?", (_D,))})
+                kd = st.selectbox("Type", [None] + kinds, format_func=lambda k: "All types" if k is None else _cp.ALERT_TEXT.get(k, k), key="tr_ak")
+                mode = st.radio("Action", ["reopen", "delete"], horizontal=True, key="tr_am",
+                                format_func={"reopen": "Re-open resolved / acknowledged alerts", "delete": "Delete the alerts"}.get)
+                if st.button("Reset alerts", type="primary", disabled=not _confirm("al"), key="tr_algo"):
+                    n_ = R_.reset_alerts(_D, user["username"], mode, kd)
+                    st.session_state.tr_msg = ("ok", f"{n_} alert(s) {'re-opened' if mode == 'reopen' else 'deleted'}.")
+                    st.rerun()
+            elif what == "Parent requests":
+                st.caption("Removes absences declared from parent logins, stop / recipient change requests for the day and all pending home-location "
+                           "requests. (Simulated parent absences are kept.)")
+                if st.button("Reset parent requests", type="primary", disabled=not _confirm("pr"), key="tr_prgo"):
+                    a_, r_, l_ = R_.reset_parent_requests(_D, user["username"])
+                    st.session_state.tr_msg = ("ok", f"Removed {a_} absence(s), {r_} change request(s), {l_} pending location(s).")
+                    st.rerun()
+            elif what == "Bus assignments":
+                perm = st.toggle("Also undo permanent moves (back to the original per-session plan)", value=True, key="tr_perm")
+                st.caption("Undoes Assignment-board changes: today's moves, swaps, merges and spare-bus switches"
+                           + (", and permanent moves." if perm else "."))
+                if st.button("Reset bus assignments", type="primary", disabled=not _confirm("as"), key="tr_asgo"):
+                    n1, n2 = R_.reset_assignment(_D, user["username"], perm)
+                    st.session_state.tr_msg = ("ok", f"{n1} one-day move(s) removed, {n2} permanent move(s) restored.")
+                    st.rerun()
+            elif what == "Whole day":
+                st.caption("Rebuilds TODAY from the simulated day script up to the current time: all of today's trips, scans, gate scans, attendance, "
+                           "visitors, early pickups, alerts and checks are removed and replayed. Affects BOTH teams — agree it first.")
+                rel = st.checkbox("Also release buses that were reset for manual testing today (reserved test buses BUS-001 / BUS-026 stay manual)",
+                                  key="tr_rel")
+                if st.button("Rebuild today now", type="primary", disabled=not _confirm("wd") or _D != db.today(), key="tr_wdgo"):
+                    if rel:
+                        R_.release_manual_buses(user["username"])
+                    with st.spinner("Rebuilding today…"):
+                        _dd.replay_today_at("now")
+                    db.audit(user["username"], role, "TEST_RESET_DAY", "day", _D, "rebuilt to now")
+                    st.session_state.tr_msg = ("ok", "Today rebuilt up to now.")
+                    st.rerun()
+                st.caption("Everything from scratch (all days, all data): Data source tab → Regenerate the DPS demo.")
