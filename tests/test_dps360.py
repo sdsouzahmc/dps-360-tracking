@@ -372,3 +372,17 @@ def test_fn39_patrol_import_us_dates_night_shift():
     assert all(r["status"] == "ARRIVED" for r in got)
     n2, msg2 = campus.import_patrol(df, source="pytest-us")
     assert n2 == 0 and "already" in msg2
+
+
+def test_fn40_reset_patrol_today_only():
+    import resets
+    d = db.today()
+    with db.tx() as c:
+        c.execute("INSERT INTO patrol_rounds(date, plan, checkpoint, guard, planned_ts, actual_ts, status, source) VALUES (?,?,?,?,?,?,?,?)",
+                  (d, "Night patrol", "Gate 1", "pytest", f"{d} 18:00:00", f"{d} 18:01:00", "ARRIVED", "pytest-reset"))
+    before_prev = db.q1("SELECT COUNT(*) n FROM patrol_rounds WHERE date<?", (d,))["n"]
+    n, _ = resets.reset_patrol(d, "pytest", source="pytest-reset")
+    assert n == 1
+    resets.reset_patrol(d, "pytest")
+    assert db.q1("SELECT COUNT(*) n FROM patrol_rounds WHERE date=?", (d,))["n"] == 0
+    assert db.q1("SELECT COUNT(*) n FROM patrol_rounds WHERE date<?", (d,))["n"] == before_prev
