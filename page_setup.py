@@ -14,6 +14,8 @@ import db
 import engine as E
 from db import TRIPS
 from qr_utils import id_cards_pdf
+import qr_utils
+import ui360 as U
 from ui import msg
 
 user = st.session_state.user
@@ -23,7 +25,7 @@ if "su_last" in st.session_state:
     lv, m = st.session_state.pop("su_last")
     msg(lv, m)
 
-tabs = st.tabs(["Data source", "Students", "Badges & ID cards", "Buses & crew", "Stops", "CSV import", "Devices", "Users", "Backup", "Demo tools", "Reset trip data", "Test resets"])
+tabs = st.tabs(["Data source", "Students", "Badges & ID cards", "Buses & crew", "Stops", "CSV import", "Devices", "Users", "Backup", "Demo tools", "Reset trip data", "Test resets", "Integrations & API"])
 
 
 def new_badge(sid, code):
@@ -148,6 +150,14 @@ with tabs[1]:
 
 # ------------------------------------------------------------------ badges
 with tabs[2]:
+    with st.expander("🏷 Rear-door bus tags (QR) — print, laminate and fix inside the rear door of each bus"):
+        st.caption("The crew scans the tag in the pre- and post-trip check, and security scans it in the after-trip inspection — proof that "
+                   "someone walked to the back of the bus.")
+        _bl = db.q("SELECT bus_no FROM buses ORDER BY bus_no")
+        _sel = st.multiselect("Buses (empty = all)", [b_["bus_no"] for b_ in _bl], key="rt_sel")
+        st.download_button("⬇ Rear-door tags (PDF)", qr_utils.rear_tags_pdf([b_ for b_ in _bl if not _sel or b_["bus_no"] in _sel],
+                                                                          db.setting("school_name", db.SCHOOL_NAME)),
+                           "DPS360_rear_door_tags.pdf", "application/pdf", key="rt_dl")
     q2 = st.text_input("Find student", key="bq")
     rows = db.q("""SELECT s.id, s.code, s.name, b.code AS badge, b.status FROM students s LEFT JOIN badges b ON b.student_id=s.id AND b.status='ACTIVE'
                    WHERE s.name LIKE ? OR s.code LIKE ? ORDER BY s.code LIMIT 200""", (f"%{q2}%", f"%{q2}%"))
@@ -638,3 +648,152 @@ with tabs[11]:
                                                "simulated day back." if mode_ == "zero" else "Today rebuilt up to now.")
                     st.rerun()
                 st.caption("Everything from scratch (all days, all data): Data source tab → Regenerate the DPS demo.")
+
+
+with tabs[12]:
+    import integrations as I
+    import security_ext as SX
+    if role not in ("admin", "manager"):
+        st.info("Only the administrator or transport lead can manage integrations.")
+    else:
+        st.markdown("**Connections to other systems.** DPS 360 exposes a REST API (run `api.py` next to the app; documentation at `/docs`). "
+                    "The CSMS ERP, the vehicle tracker, RFID readers and Woqod push to it or are imported here.")
+        st.dataframe(pd.DataFrame(I.status()), hide_index=True, width="stretch")
+        it = st.segmented_control("Section", ["API keys", "CSMS ERP", "Woqod fuel", "Vehicle tracker", "RFID readers", "Scan speed"], default="API keys",
+                                  key="int_sec") or "API keys"
+        with st.container(border=True):
+            if it == "API keys":
+                st.caption("Each system gets its own key with only the scopes it needs. The key is shown once — store it in that system's settings.")
+                a_, b_ = st.columns([2, 3])
+                kn = a_.text_input("Key name", placeholder="e.g. CSMS ERP, Tracker vendor, Gate readers", key="ak_n")
+                ks = b_.multiselect("Scopes", I.SCOPES, default=["read"], key="ak_s")
+                if st.button("Create API key", type="primary", disabled=not (kn.strip() and ks), key="ak_go"):
+                    st.session_state.ak_new = I.create_api_key(kn.strip(), ks, user["username"])
+                if st.session_state.get("ak_new"):
+                    st.code(st.session_state.ak_new)
+                    st.warning("Copy this key now — it will not be shown again.")
+                keys = I.api_keys()
+                st.dataframe(pd.DataFrame([{"Name": k_["name"], "Key starts": k_["prefix"] + "…", "Scopes": k_["scopes"], "Created": k_["ts"][:16],
+                                            "Last used": (k_["last_used"] or "")[:16], "Active": "yes" if k_["active"] else "revoked"} for k_ in keys]),
+                             hide_index=True, width="stretch")
+                act_ = [k_ for k_ in keys if k_["active"]]
+                if act_:
+                    rk = st.selectbox("Revoke", [None] + [k_["id"] for k_ in act_], key="ak_rv",
+                                      format_func=lambda i: "—" if i is None else next(f"{k_['name']} ({k_['prefix']}…)" for k_ in act_ if k_["id"] == i))
+                    if rk and st.button("Revoke key", key="ak_rv_go"):
+                        I.revoke_api_key(rk, user["username"])
+                        st.rerun()
+                st.caption("Endpoints: GET /v1/students, /v1/students/{code}, /v1/presence, /v1/buses, /v1/trips, /v1/trips/{id}/manifest, /v1/attendance, "
+                           "/v1/alerts, /v1/inspections, /v1/fleet/job-orders, /v1/fleet/documents, /v1/eta · POST /v1/scans/bus, /v1/scans/gate, /v1/rfid, "
+                           "/v1/gps/positions, /v1/telematics/events, /v1/fuel/transactions, /v1/csms/sync.")
+            elif it == "CSMS ERP":
+                cfg = I.csms_config()
+                st.caption("Students, parents, staff, vehicles, routes and stops come from CSMS so nobody types them twice. Until DPS IT shares the CSMS "
+                           "API, upload a CSMS export here: DPS 360 shows exactly what would change before anything is written.")
+                a_, b_ = st.columns(2)
+                cu = a_.text_input("CSMS API base URL", value=cfg["base_url"], placeholder="https://csms.dpsmisdoha.com/api", key="cs_u")
+                ck = b_.text_input("CSMS API key", type="password", placeholder="(stored)" if cfg["has_key"] else "", key="cs_k")
+                if st.button("Save CSMS connection", key="cs_save"):
+                    db.set_setting("csms_base_url", cu.strip())
+                    if ck.strip():
+                        db.set_setting("csms_api_key", ck.strip())
+                    st.success("Saved.")
+                ent = st.radio("Data", ["students", "staff", "buses"], horizontal=True, key="cs_e")
+                up = st.file_uploader("CSMS export (CSV, Excel or JSON)", type=["csv", "xlsx", "json"], key="cs_f")
+                rows_ = None
+                if up is not None:
+                    import json as _j
+                    rows_ = (_j.loads(up.getvalue()) if up.name.endswith(".json") else
+                             (pd.read_csv(up, dtype=str) if up.name.endswith(".csv") else pd.read_excel(up, dtype=str)).to_dict("records"))
+                elif cfg["base_url"] and st.button(f"Pull {ent} from the CSMS API", key="cs_pull"):
+                    try:
+                        rows_ = I.csms_pull(ent)
+                    except Exception as ex:
+                        st.error(str(ex))
+                if rows_:
+                    d_ = I.csms_diff(ent, rows_)
+                    st.session_state.cs_diff = d_
+                d_ = st.session_state.get("cs_diff")
+                if d_ and d_["entity"] == ent:
+                    U.kpis([("NEW", len(d_["new"]), f"{ent} to add", "#2E9E5B", "green"), ("CHANGED", len(d_["changed"]), "fields to update", "#3D4FD6", ""),
+                            ("NOT IN CSMS", len(d_["missing"]), "kept unless you deactivate", "#E07A1F", "")], n=3)
+                    if d_["changed"]:
+                        st.dataframe(pd.DataFrame([{"Key": c_["key"], "Field": f_, "DPS 360": v[0], "CSMS": v[1]} for c_ in d_["changed"][:300]
+                                                   for f_, v in c_["changes"].items()]), hide_index=True, width="stretch", height=220)
+                    if d_["new"]:
+                        st.dataframe(pd.DataFrame(d_["new"][:300]), hide_index=True, width="stretch", height=180)
+                    deact = st.checkbox("Deactivate students missing from CSMS (left school)", key="cs_deact") if ent == "students" else False
+                    if st.button("Apply these changes", type="primary", key="cs_apply"):
+                        r_ = I.csms_apply(d_, user["username"], deact)
+                        st.session_state.pop("cs_diff", None)
+                        st.success(f"Applied: {r_['new']} new, {r_['updated']} updated, {r_['deactivated']} deactivated.")
+                st.caption("Accepted column names include student_id / admission_no, name, class / grade, section, gender, transport, shift; "
+                           "employee_id, designation, mobile, department; vehicle_no, plate_no, seats, route.")
+            elif it == "Woqod fuel":
+                st.caption("Upload the monthly / weekly Woqod fuel-card statement. Lines are matched to buses by plate or card number; lines already "
+                           "imported (same transaction id) are skipped; suspicious fills are flagged in Fleet → Fuel. When DPS gets Woqod API access, "
+                           "the same import runs automatically through POST /v1/fuel/transactions.")
+                st.download_button("Statement template (CSV)", pd.DataFrame(I.woqod_template()).to_csv(index=False).encode(), "woqod_statement_template.csv",
+                                   "text/csv", key="wq_t")
+                wf = st.file_uploader("Woqod statement (CSV or Excel)", type=["csv", "xlsx", "xls"], key="wq_f")
+                if wf is not None and st.button("Import statement", type="primary", key="wq_go"):
+                    df_ = pd.read_csv(wf) if wf.name.lower().endswith(".csv") else pd.read_excel(wf)
+                    n_, fl_, pb_ = I.woqod_import(df_, user["username"])
+                    st.success(f"{n_} fuel line(s) imported, {len(fl_)} flagged.") if n_ else st.warning("Nothing imported.")
+                    if pb_:
+                        st.warning(pb_)
+            elif it == "Vehicle tracker":
+                st.caption("The tracker (FVTS / GPS box on each bus) pushes positions and events to the API. Positions give the live map, the odometer "
+                           "for maintenance and parents' ETA; speeds above the limit and harsh braking / acceleration raise alerts and feed driver "
+                           "behaviour in Fleet.")
+                sl = st.number_input("Speed limit (km/h)", value=I.speed_limit(), step=5.0, key="tk_sl")
+                if st.button("Save limit", key="tk_sl_go"):
+                    db.set_setting("speed_limit_kmh", sl)
+                    st.success("Saved.")
+                bl_ = db.q("SELECT id, bus_no FROM buses ORDER BY bus_no")
+                dbb = st.selectbox("Demo: send a 6-minute GPS track for", [b_["id"] for b_ in bl_], format_func=lambda i: next(b_["bus_no"] for b_ in bl_ if b_["id"] == i),
+                                   key="tk_b")
+                if st.button("Send demo track (includes one over-speed point)", key="tk_go"):
+                    n_, a_ = I.demo_drive(dbb)
+                    st.success(f"{n_} positions stored, {a_} speeding alert(s).")
+                pos = db.q("SELECT g.ts, b.bus_no, g.lat, g.lon, g.speed_kmh, g.source FROM gps_positions g JOIN buses b ON b.id=g.bus_id ORDER BY g.ts DESC LIMIT 50")
+                ev = db.q("SELECT t.ts, b.bus_no, t.kind, t.value, t.source FROM telematics_events t JOIN buses b ON b.id=t.bus_id ORDER BY t.ts DESC LIMIT 50")
+                a_, b_ = st.columns(2)
+                a_.markdown("**Latest positions**")
+                a_.dataframe(pd.DataFrame(pos), hide_index=True, width="stretch", height=260)
+                b_.markdown("**Latest events**")
+                b_.dataframe(pd.DataFrame(ev), hide_index=True, width="stretch", height=260)
+            elif it == "RFID readers":
+                st.caption("Each reader is registered to a bus door or a gate. A tag read is processed like a card scan — wrong bus, unknown tag and "
+                           "exit-without-pass checks stay the same. Map tag UIDs to card numbers if the tags carry their own UID.")
+                a_, b_, c_ = st.columns(3)
+                rid_ = a_.text_input("Reader id", placeholder="e.g. BUS-001-DOOR", key="rf_id")
+                pt_ = b_.selectbox("Point", ["BUS_IN", "BUS_OUT", "GATE"], key="rf_pt")
+                if pt_ == "GATE":
+                    gl_ = db.q("SELECT id, name FROM gates")
+                    tgt = c_.selectbox("Gate", [g_["id"] for g_ in gl_], format_func=lambda i: next(g_["name"] for g_ in gl_ if g_["id"] == i), key="rf_g")
+                else:
+                    bl_ = db.q("SELECT id, bus_no FROM buses ORDER BY bus_no")
+                    tgt = c_.selectbox("Bus", [b_x["id"] for b_x in bl_], format_func=lambda i: next(b_x["bus_no"] for b_x in bl_ if b_x["id"] == i), key="rf_b")
+                if st.button("Register reader", key="rf_go", disabled=not rid_.strip()):
+                    I.register_reader(rid_.strip(), pt_, None if pt_ == "GATE" else tgt, tgt if pt_ == "GATE" else None)
+                    st.success("Reader registered.")
+                st.dataframe(pd.DataFrame(db.q("SELECT reader_id, point, bus_id, gate_id FROM rfid_readers")), hide_index=True, width="stretch")
+                tu = st.text_input("Test a tag read: reader id | tag", placeholder="BUS-001-DOOR | 27xxxxx", key="rf_test")
+                if "|" in tu and st.button("Send test read", key="rf_t_go"):
+                    a1, a2 = [x_.strip() for x_ in tu.split("|", 1)]
+                    st.json(I.rfid_scan(a1, a2))
+            elif it == "Scan speed":
+                st.caption("DPS IT asked how fast the bus and gate points register a scan. Every scan is timed from the read to the result on screen "
+                           "(server side).")
+                a_, b_ = st.columns(2)
+                f_ = a_.date_input("From", value=pd.Timestamp(db.today()) - pd.Timedelta(days=7), key="ss_f")
+                t_ = b_.date_input("To", value=pd.Timestamp(db.today()), key="ss_t")
+                sp = SX.scan_speed(f_.strftime("%Y-%m-%d"), t_.strftime("%Y-%m-%d"))
+                if sp:
+                    st.dataframe(pd.DataFrame([{"Scan point": k_, "Scans": v["scans"], "Median (ms)": round(v["median_ms"]), "95% under (ms)": round(v["p95_ms"]),
+                                                "Slowest (ms)": round(v["max_ms"]), "Under 1 second": f"{v['under_1s']:.1%}"} for k_, v in sp.items()]),
+                                 hide_index=True, width="stretch")
+                else:
+                    st.caption("No scans in this period.")
+

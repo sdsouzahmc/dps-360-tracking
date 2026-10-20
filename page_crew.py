@@ -19,6 +19,7 @@ from qr_utils import decode_qr
 from qr_scanner import qr_scanner
 from ui import alert_sound, gps_fix, lines_table, msg, status_text
 from ui360 import vehicle_check_form
+import ui360 as U
 
 user = st.session_state.user
 role = user["role"]
@@ -122,6 +123,23 @@ def route_stops(route, lines):
             out.append({"id": s_["id"], "name": s_["name"], "lat": s_["lat"], "lon": s_["lon"], "eta": None})
     return out
 
+
+# ------------------------------------------------------------------ vehicle and crew documents (document wallet)
+import fleet as _F  # noqa: E402
+_docs = _F.documents("BUS", bus_id) + [d_ for sid_ in (bus["driver_id"], bus["supervisor_id"], bus["caretaker_id"]) if sid_
+                                       for d_ in _F.documents("STAFF", sid_)]
+_bad = [d_ for d_ in _docs if d_["state"] in ("EXPIRED", "EXPIRING")]
+with st.expander(f"📄 {t('Vehicle & crew documents')}" + (f" · ⚠ {len(_bad)}" if _bad else ""), expanded=False):
+    for d_ in _docs:
+        pc = {"EXPIRED": "red", "EXPIRING": "orange", "VALID": "green"}.get(d_["state"], "grey")
+        lab = {"EXPIRED": f"expired {-d_['days_left']} d ago", "EXPIRING": f"expires in {d_['days_left']} d", "VALID": f"valid to {d_['expiry_date']}"}.get(d_["state"], "")
+        a_, b_ = st.columns([4, 1], vertical_alignment="center")
+        a_.markdown(f"**{d_['doc_type']}** · {d_['owner']} · no. {d_['doc_no']} {U.pill(lab, pc)}", unsafe_allow_html=True)
+        if d_["has_file"]:
+            f_ = _F.doc_file(d_["id"])
+            b_.download_button("Open", f_["file_data"], f_["file_name"], f_["file_mime"], key=f"{K}_doc{d_['id']}")
+    if _bad:
+        st.caption("Expired or expiring documents are flagged to the transport office.")
 
 # ------------------------------------------------------------------ no open trip: today's list + start
 run = E.open_run(bus_id)
@@ -324,6 +342,9 @@ if not run:
                     m += " Route waiting for supervisor approval — stops follow the usual order meanwhile."
             except Exception as ex:  # never block a trip start on planning
                 m += f" (route plan unavailable: {ex})"
+            _late = E.auto_delay_notice(rid, user["username"], role)
+            if _late:
+                m += f" Running {_late} min late — parents on this trip were notified automatically."
             st.session_state[f"{K}_last"] = ("ok", m + ("" if g["gps_ok"] else " (start location missing — GPS unavailable)"))
             st.rerun()
     if offline:
@@ -519,7 +540,8 @@ def submit(kind, badge=None, sid=None, method="QR", extra=None, ctx=None, pend_i
             dstore.save_queue(dev_id, queue)
             res["message"] += " · 📴 saved on device, will sync"
     else:
-        res = E.process(run["id"], kind, ctx, badge_code=badge, student_id=sid)
+        import security_ext as _SX
+        res = _SX.timed("BUS", E.process, run["id"], kind, ctx, badge_code=badge, student_id=sid, device=bus["bus_no"])
     # several scans can wait for confirmation at the same time — a new scan never drops an unconfirmed one
     pl = st.session_state.setdefault(f"{K}_pendings", [])
     if pend_id is not None and not res.get("needs") and "Over-capacity needs" not in res["message"]:

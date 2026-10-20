@@ -43,10 +43,18 @@ U.kpis([("ON ROLL", len(roster), "", "#1B2559", ""), ("ARRIVED TODAY", arrived, 
         ("NO SCAN YET", noscan, "not on a bus, not through a gate", "#D93025", "red" if noscan else "")], n=5)
 
 ep = [e for e in campus.early_pickups(D) if e["class"] == f"{cls['name']}-{cls['section']}" and e["status"] in ("APPROVED", "COMPLETED")]
+import security_ext as _SX  # noqa: E402
 for e in ep:
-    st.markdown(f"<div class='warn'>🕐 <b>{e['name']}</b> leaves early at {e['pickup_time']} with {e['collector']} ({e['relation']}) — "
-                f"{'already collected at ' + e['out_ts'][11:16] if e['status'] == 'COMPLETED' else 'pass ' + e['pass_code'] + ', security will release'}.</div>",
-                unsafe_allow_html=True)
+    a_, b_ = st.columns([4, 1.3], vertical_alignment="center")
+    a_.markdown(f"<div class='warn'>🕐 <b>{e['name']}</b> leaves early at {e['pickup_time']} with {e['collector']} ({e['relation']}) — "
+                + ("already collected at " + e["out_ts"][11:16] if e["status"] == "COMPLETED" else
+                   (f"sent to the gate at {e['ready_ts'][11:16]}, parent told" if e.get("ready_ts") else "pass " + e["pass_code"] + ", security will release"))
+                + ".</div>", unsafe_allow_html=True)
+    if e["status"] == "APPROVED" and not e.get("ready_ts") and b_.button("🚶 Send to the gate", key=f"rdy{e['id']}", width="stretch",
+                                                                          help="Tells the parent the child is ready for collection"):
+        ok_, m_ = _SX.mark_ready(e["id"], st.session_state.user["display_name"])
+        st.toast(m_)
+        st.rerun()
 
 st.markdown("##### Verify the list")
 st.caption("Suggested from today's scans: arrived by bus or through a gate → Present (Late after " + arrive_by + "); parent absence → Absent. "

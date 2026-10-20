@@ -65,8 +65,12 @@ with left:
             st.markdown("🚗 Private transport — tracked at the campus gates.")
         g = db.q("""SELECT g.name, g.relation, g.phone FROM guardians g JOIN student_guardians sg ON sg.guardian_id=g.id WHERE sg.student_id=?""", (sid,))
         rec = db.q("SELECT name, relation FROM recipients WHERE student_id=? AND active=1", (sid,))
-        st.markdown("**Parents** · " + " · ".join(f"{x['name']} ({x['relation']}, {x['phone']})" for x in g))
-        st.markdown("**Allowed to collect** · " + " · ".join(f"{x['name']} ({x['relation']})" for x in rec))
+        import security_ext as SX
+        st.markdown("**Parents and allowed collectors** (photo check at the gate)")
+        st.markdown(SX.collectors_html(sid, 52), unsafe_allow_html=True)
+        _gp = SX.gate_passes(True, sid)
+        if _gp:
+            st.markdown("**Standing gate pass** · " + " · ".join(f"{x['pass_code']} {x['days']} → {x['collector']}" for x in _gp))
 with right:
     with st.container(border=True):
         st.markdown(f"<div class='sect'>🕓 Day timeline · {datetime.strptime(day, '%Y-%m-%d'):%A %d %b}</div>", unsafe_allow_html=True)

@@ -17,7 +17,7 @@ st.title("🏫 Campus & visitors")
 
 pend = campus.early_pickups(D, "PENDING")
 tabs = st.tabs(["👥 Students on campus", f"🕐 Early pickups ({len(pend)} to approve)", "✅ Attendance tracker", "🪪 Visitors", "👩‍🏫 Staff",
-                "🚨 Campus alerts"])
+                "🚨 Campus alerts", "🎫 Gate passes & collectors"])
 
 with tabs[0]:
     pres = campus.presence(D)
@@ -133,3 +133,52 @@ with tabs[5]:
                 st.rerun()
     if st.session_state.get("ca_msg"):
         msg("ok", st.session_state.pop("ca_msg"))
+
+with tabs[6]:
+    import security_ext as SX
+    user = st.session_state.user
+    st.caption("Standing gate passes let a bus student be collected by a named person on set days (tuition, swimming, therapy…). "
+               "Security scans the card or pass at dismissal; the child is taken off the home bus list for that day. "
+               "Below that: each student's parents and allowed collectors with their photos, used for the photo check at the gate.")
+    gps = SX.gate_passes()
+    st.dataframe(pd.DataFrame([{"Pass": g["pass_code"], "Student": g["name"], "Class": g["class"], "Days": g["days"], "From": g["valid_from"],
+                                "To": g["valid_to"], "Collector": f"{g['collector']} ({g['relation']})", "Note": g["note"]} for g in gps]),
+                 hide_index=True, width="stretch")
+    if user["role"] in ("admin", "manager", "dispatcher"):
+        with st.expander("➕ New standing gate pass"):
+            qq = st.text_input("Student name or ID", key="gp_q")
+            hits = db.q("SELECT id, name, code, class_name, section FROM students WHERE active=1 AND (name LIKE ? OR code=?) ORDER BY name LIMIT 20",
+                        (f"%{qq.strip()}%", qq.strip().upper())) if qq.strip() else []
+            if hits:
+                sid = st.selectbox("Student", [h["id"] for h in hits], key="gp_sid",
+                                   format_func=lambda i: next(f"{h['name']} · {h['class_name']}-{h['section']} · {h['code']}" for h in hits if h["id"] == i))
+                cl = SX.collectors(sid)
+                st.markdown(SX.collectors_html(sid, 50), unsafe_allow_html=True)
+                who = st.selectbox("Collector", [c["name"] for c in cl], key="gp_who")
+                cc = next(c for c in cl if c["name"] == who)
+                days = st.pills("Days", ["Sun", "Mon", "Tue", "Wed", "Thu"], selection_mode="multi", default=["Sun"], key="gp_days")
+                a, b = st.columns(2)
+                vf = a.date_input("Valid from", key="gp_vf")
+                vt = b.date_input("Valid to", value=pd.Timestamp("2027-06-30"), key="gp_vt")
+                note = st.text_input("Reason", placeholder="e.g. Tuition on Sundays", key="gp_note")
+                if st.button("Create gate pass", type="primary", disabled=not days, key="gp_go"):
+                    code = SX.add_gate_pass(sid, days, vf.isoformat(), vt.isoformat(), cc["name"], cc["relation"], cc.get("id_number") or "", note,
+                                            user["username"])
+                    st.success(f"Gate pass {code} created.")
+                    st.rerun()
+        if gps:
+            rv = st.selectbox("Revoke a pass", [None] + [g["id"] for g in gps], key="gp_rv",
+                              format_func=lambda i: "—" if i is None else next(f"{g['pass_code']} · {g['name']}" for g in gps if g["id"] == i))
+            if rv and st.button("Revoke", key="gp_rv_go"):
+                SX.revoke_gate_pass(rv, user["username"])
+                st.rerun()
+    st.markdown("##### Allowed collectors (photo check)")
+    q2 = st.text_input("Find a student", key="col_q", placeholder="Name or student ID")
+    h2 = db.q("SELECT id, name, code, class_name, section FROM students WHERE active=1 AND (name LIKE ? OR code=?) ORDER BY name LIMIT 10",
+              (f"%{q2.strip()}%", q2.strip().upper())) if q2.strip() else []
+    for h in h2[:5]:
+        with st.container(border=True):
+            st.markdown(f"**{h['name']}** · {h['class_name']}-{h['section']} · {h['code']}")
+            st.markdown(SX.collectors_html(h["id"], 56), unsafe_allow_html=True)
+    st.caption("Demo photos are generated; in production the parent uploads a photo of each collector in the Parent app and the office approves it.")
+

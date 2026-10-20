@@ -257,6 +257,46 @@ with c5, st.container(border=True):
     st.caption(f"{int(bdf[bdf.State == 'Open'].n.sum())} open · {int(bdf[bdf.State == 'Resolved'].n.sum())} resolved (security alerts incl. missed checkpoints)")
 
 
+# ------------------------------------------------------------------ bus inspections (no child left behind)
+import security_ext as SX  # noqa: E402
+st.markdown("### 🚌 Bus inspections after every trip")
+brd = SX.inspections_board(day, NOW if day == TODAY else datetime.strptime(day + " 23:00", "%Y-%m-%d %H:%M"))
+cnt = {k: sum(1 for b in brd if b["state"] == k) for k in ("DONE", "LATE", "DUE", "MISSED", "CHILD_FOUND")}
+insp_done = cnt["DONE"] + cnt["LATE"] + cnt["CHILD_FOUND"]
+U.kpis([("TRIPS CLOSED", len(brd), "each needs a security check", "#1B2559", ""),
+        ("INSPECTED", f"{insp_done / len(brd):.0%}" if brd else "—", f"{insp_done} of {len(brd)} · {cnt['LATE']} late", GREEN, "green"),
+        ("DUE NOW", cnt["DUE"], f"within {SX.GRACE_MIN} min of closing", AMBER, ""),
+        ("MISSED", cnt["MISSED"], "alert raised", RED, "red" if cnt["MISSED"] else ""),
+        ("CHILD FOUND", cnt["CHILD_FOUND"], "after the crew sweep", RED, "red" if cnt["CHILD_FOUND"] else "")], n=5)
+i1, i2 = st.columns([1.5, 1])
+with i1, st.container(border=True):
+    st.markdown("<div class='sect'>Inspections by trip</div>", unsafe_allow_html=True)
+    if brd:
+        lab = {"DONE": "🟢 Bus empty", "LATE": "🟠 Late", "DUE": "🔵 Due", "MISSED": "🔴 Missed", "CHILD_FOUND": "🚨 Child found"}
+        st.dataframe(pd.DataFrame([{"Bus": b["bus_no"], "Trip": b["trip_no"], "Closed": (b["end_ts"] or "")[11:16],
+                                    "Inspected": ((b["inspection"] or {}).get("ts") or "")[11:16],
+                                    "Min after": (b["inspection"] or {}).get("minutes_after"),
+                                    "Inspector": (b["inspection"] or {}).get("inspector_name") or "", "State": lab[b["state"]]} for b in brd]),
+                     hide_index=True, width="stretch", height=280)
+    else:
+        st.caption("No trips closed on this day yet.")
+with i2, st.container(border=True):
+    st.markdown("<div class='sect'>Last 7 days</div>", unsafe_allow_html=True)
+    d1_ = datetime.strptime(day, "%Y-%m-%d")
+    rows7 = []
+    for i in range(6, -1, -1):
+        dd_ = (d1_ - timedelta(days=i)).strftime("%Y-%m-%d")
+        b7 = SX.inspections_board(dd_, NOW if dd_ == TODAY else datetime.strptime(dd_ + " 23:00", "%Y-%m-%d %H:%M"))
+        lab_ = datetime.strptime(dd_, "%Y-%m-%d").strftime("%a")
+        for k_, nm in (("ok", "On time"), ("late", "Late"), ("miss", "Missed")):
+            n_ = sum(1 for b in b7 if (b["state"] in ("DONE", "CHILD_FOUND") if k_ == "ok" else b["state"] == "LATE" if k_ == "late" else b["state"] == "MISSED"))
+            rows7.append({"Day": lab_, "State": nm, "n": n_, "o": ("ok", "late", "miss").index(k_)})
+    ch7 = alt.Chart(pd.DataFrame(rows7)).mark_bar(size=16).encode(
+        x=alt.X("Day:N", sort=None, title=None, axis=alt.Axis(labelAngle=0)), y=alt.Y("n:Q", title=None, stack=True), order=alt.Order("o:Q"),
+        color=alt.Color("State:N", scale=alt.Scale(domain=["On time", "Late", "Missed"], range=[GREEN, AMBER, RED]),
+                        legend=alt.Legend(orient="bottom", title=None)), tooltip=["Day", "State", "n"])
+    st.altair_chart(ch7.properties(height=230), width="stretch")
+
 # ------------------------------------------------------------------ test reset (today only, admin / transport lead)
 if st.session_state.get("user", {}).get("role") in ("admin", "manager") and day == TODAY:
     import resets as R_

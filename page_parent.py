@@ -121,6 +121,39 @@ for k in kids:
             elif k["transport"] == "BUS":
                 st.caption("🔒 Live bus location is not shown to parents (school policy). You get a message when your child boards, "
                            "arrives at school, leaves and is handed over.")
+            if k["transport"] == "BUS":
+                _now = db.now().strftime("%H:%M")
+                _bt = [(n, E.manifest_for_student(k, today, n, None)) for n in TRIPS]
+                _bt = [(n, p) for n, p in _bt if p]
+                _cur = next(((n, p) for n, p in _bt if TRIPS[n]["window"][1] >= _now), _bt[-1] if _bt else None)
+                if _cur:
+                    _n, _p = _cur
+                    _b = db.q1("SELECT * FROM buses WHERE bus_no=?", (_p["bus_no"],))
+                    _sup = db.q1("SELECT name, phone FROM staff WHERE id=?", (_b["supervisor_id"],)) if _b else None
+                    if db.setting("parent_eta", "1") == "1" and _p.get("purpose") == "PICKUP" and _p.get("stop_id"):
+                        import integrations as _I
+                        _eta = _I.eta_minutes(_b["id"], _p["stop_id"])
+                        if _eta:
+                            st.markdown(f"🚌 **{_p['bus_no']} is about {_eta} min from your stop** "
+                                        f"({(db.stop(_p['stop_id']) or {}).get('name', '')}) — live from the bus tracker.")
+                    with st.popover(f"📞 Contact {_p['bus_no']}", width="stretch"):
+                        st.markdown(f"**{_p['bus_no']}** · Trip {_n} ({TRIPS[_n]['short']})")
+                        if _sup and _sup["phone"]:
+                            st.markdown(f"Bus supervisor **{_sup['name']}** — <a href='tel:{_sup['phone'].replace(' ', '')}'>📞 Call the bus</a>",
+                                        unsafe_allow_html=True)
+                            st.caption("Please call only when needed — the driver never answers while driving; the supervisor will.")
+                        _txt = st.text_area("Message to the bus crew", key=f"bmsg{k['id']}", max_chars=200,
+                                            placeholder="e.g. Please wait 2 minutes at the stop today")
+                        if st.button(t("Send"), key=f"bmsend{k['id']}", type="primary", disabled=not _txt.strip()):
+                            _run = db.q1("SELECT id FROM trip_runs WHERE bus_id=? AND date=? AND trip_no=?", (_b["id"], today, _n))
+                            E.send_bus_message(_b["id"], _run["id"] if _run else None, f"[Parent of {k['name']}] {_txt.strip()}",
+                                               user.get("display_name") or user["username"], "guardian")
+                            st.session_state.pp_last = ("ok", f"Message sent to {_p['bus_no']} — you will see here when the crew has read it.")
+                            st.rerun()
+                        _mine = [m_ for m_ in E.bus_messages(_b["id"], limit=30) if (m_["text"] or "").startswith(f"[Parent of {k['name']}]")][:3]
+                        for m_ in _mine:
+                            st.caption(f"{m_['ts'][11:16]} · {m_['text'].split('] ', 1)[-1]} — "
+                                       + (f"✔ read by the crew at {m_['ack_ts'][11:16]}" if m_["ack_ts"] else "not read yet"))
         # quick actions
         a1, a2, a3 = st.columns(3)
         with a3.popover("🕐 Early pickup", width="stretch"):
@@ -130,6 +163,8 @@ for k in kids:
             rec = db.q("SELECT name, relation, phone, id_number FROM recipients WHERE student_id=? AND active=1", (k["id"],))
             who = st.selectbox("Who collects", [r_["name"] for r_ in rec] + ["Someone else"], key=f"epw{k['id']}")
             if who == "Someone else":
+                st.caption("⚠ Someone who is not on your allowed list is held at the gate until the school confirms with you by phone. "
+                           "Ask the school to add regular collectors (with a photo) to your list.")
                 c_n = st.text_input("Name", key=f"epn{k['id']}")
                 c_r = st.text_input("Relation", key=f"epr{k['id']}")
                 c_p = st.text_input("Mobile", key=f"epp{k['id']}")
