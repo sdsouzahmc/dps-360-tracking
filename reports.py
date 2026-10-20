@@ -405,6 +405,24 @@ def r_journey(f):
     return _status(out, "Line status")
 
 
+def r_on_campus(f):
+    import campus
+    from datetime import datetime as _dt
+    at = f.get("at") or (_dt.strptime(f["d2"] + " 23:59", "%Y-%m-%d %H:%M"))
+    rows = campus.on_campus_at(at.strftime("%Y-%m-%d"), at)
+    if f.get("classes"):
+        rows = [r for r in rows if r["class_name"] in f["classes"]]
+    if f.get("transport"):
+        rows = [r for r in rows if r["transport"] in f["transport"]]
+    out = pd.DataFrame([{"#": i + 1, "Class": f"{r['class_name']}-{r['section']}", "Student": r["name"], "Student_ID": r["code"],
+                         "Card": r["card"] or "", "Transport": "Bus" if r["transport"] == "BUS" else "Private", "Arrived": (r["arrived"] or "")[11:16],
+                         "Came in via": r["via"], "Class mark": (r["class_mark"] or "").title(), "Class teacher": r["teacher"] or ""}
+                        for i, r in enumerate(rows)])
+    out.attrs["note"] = f"On campus at {at:%A %d %b %Y, %H:%M} — {len(rows):,} students."
+    out.attrs["rows"] = rows
+    return out
+
+
 # ------------------------------------------------------------------ registry
 REPORTS = [
     # key, category, title, definition, fn, drill ('run' | 'student' | None)
@@ -418,6 +436,9 @@ REPORTS = [
     ("capacity", "Operations", "Capacity utilisation", "Peak on board = highest simultaneous count from check-in/check-out times, vs bus capacity.", r_capacity, "run"),
     ("duration", "Operations", "Ride duration", "Minutes between a child's check-in and check-out, by bus, trip and purpose.", r_duration, None),
     ("stops", "Operations", "Stop activity", "Per stop: pickups, home releases, no-shows, absences and children not released.", r_stops, None),
+    ("oncampus", "Students", "On campus students list", "Students on campus at the chosen date and time: last movement at or before that time was IN "
+     "(gate scan or bus arrival at school), or marked present in class with no exit. Grouped by class for printing (headcount / evacuation roll).",
+     r_on_campus, "student"),
     ("attendance", "Students", "Transport attendance by student", "Planned journeys vs travelled, declared absences and undeclared no-shows per student.", r_attendance, "student"),
     ("receipt", "Handover", "School receipt log", "Children checked out at school and the receiving staff member who accepted them.", r_receipt, "student"),
     ("release", "Handover", "Home release log", "Children released at a stop and the authorized recipient they were handed to.", r_release, "student"),
@@ -480,6 +501,68 @@ def to_pdf(title, definition, filters_text, frame, max_rows=600):
         if len(frame) > max_rows:
             story.append(Paragraph(f"Showing first {max_rows} of {len(frame)} rows — use CSV for the full data.", small))
     doc.build(story)
+    return buf.getvalue()
+
+
+def on_campus_pdf(rows, at, school=None):
+    """Printable on-campus roll: one block per class with headcount, tick box and signature line (portrait A4)."""
+    from collections import OrderedDict
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.platypus import CondPageBreak, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    school = school or db.setting("school_name", db.SCHOOL_NAME)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
+                            title=f"On campus students {at:%Y-%m-%d %H:%M}")
+    ss = getSampleStyleSheet()
+    h = ss["Heading3"].clone("h", spaceBefore=6, spaceAfter=2, fontSize=11)
+    small = ss["BodyText"].clone("sm", fontSize=8, leading=9.5)
+    by = OrderedDict()
+    for r in rows:
+        by.setdefault(f"{r['class_name']}-{r['section']}", []).append(r)
+    bus_n = sum(1 for r in rows if r["via"].startswith("Bus"))
+    story = [Paragraph(f"{school} — On campus students", ss["Title"]),
+             Paragraph(f"<b>At:</b> {at:%A %d %B %Y, %H:%M} &nbsp; <b>Total on campus:</b> {len(rows):,} &nbsp; ({bus_n:,} arrived by bus, "
+                       f"{len(rows) - bus_n:,} through a gate / in class) &nbsp; <b>Classes:</b> {len(by)} &nbsp; <b>Printed:</b> {db.ts()[:16]}", ss["BodyText"]),
+             Paragraph("Use for a headcount or evacuation: tick each child present at the assembly point, then sign. Children who left before the "
+                       "time above (collected, early pickup, bus home) are not listed.", small), Spacer(1, 3 * mm)]
+    summ = [["Class", "On campus", "Class", "On campus", "Class", "On campus"]]
+    items = [(k, len(v)) for k, v in by.items()]
+    for i in range(0, len(items), 3):
+        row = []
+        for k, n in items[i:i + 3]:
+            row += [k, str(n)]
+        summ.append(row + [""] * (6 - len(row)))
+    t = Table(summ, colWidths=[32 * mm, 22 * mm] * 3, repeatRows=1)
+    t.setStyle(TableStyle([("FONT", (0, 0), (-1, -1), "Helvetica", 8), ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8),
+                           ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1B2559")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                           ("GRID", (0, 0), (-1, -1), .25, colors.grey), ("ALIGN", (1, 0), (1, -1), "CENTER"), ("ALIGN", (3, 0), (3, -1), "CENTER"),
+                           ("ALIGN", (5, 0), (5, -1), "CENTER")]))
+    story += [t, Spacer(1, 4 * mm)]
+    for k, lst in by.items():
+        teacher = lst[0].get("teacher") or "—"
+        data = [["Tick", "#", "Student", "ID", "Arrived", "Came in via", "Transport"]] + \
+               [["", str(i + 1), Paragraph(r["name"], small), r["code"], (r["arrived"] or "")[11:16], Paragraph(r["via"], small),
+                 "Bus" if r["transport"] == "BUS" else "Private"] for i, r in enumerate(lst)]
+        tb = Table(data, colWidths=[10 * mm, 8 * mm, 56 * mm, 24 * mm, 15 * mm, 50 * mm, 19 * mm], repeatRows=1)
+        tb.setStyle(TableStyle([("FONT", (0, 0), (-1, -1), "Helvetica", 8), ("FONT", (0, 0), (-1, 0), "Helvetica-Bold", 8),
+                                ("BOX", (0, 1), (0, -1), .8, colors.black), ("LINEBELOW", (0, 1), (0, -1), .8, colors.black),
+                                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E9ECFC")), ("GRID", (0, 0), (-1, -1), .25, colors.grey),
+                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F6F7FB")])]))
+        story += [CondPageBreak(40 * mm), Paragraph(f"{k} &nbsp;·&nbsp; {len(lst)} on campus &nbsp;·&nbsp; class teacher {teacher}", h), tb,
+                  Paragraph("Counted present: ______ / " + str(len(lst)) + " &nbsp;&nbsp; Signature: ____________________ &nbsp;&nbsp; Time: ________", small),
+                  Spacer(1, 3 * mm)]
+    if not rows:
+        story.append(Paragraph("No students on campus at this time.", ss["BodyText"]))
+
+    def foot(c, d):
+        c.setFont("Helvetica", 7)
+        c.drawString(12 * mm, 7 * mm, f"On campus at {at:%d %b %Y %H:%M} · {len(rows):,} students")
+        c.drawRightString(A4[0] - 12 * mm, 7 * mm, f"Page {d.page}")
+    doc.build(story, onFirstPage=foot, onLaterPages=foot)
     return buf.getvalue()
 
 

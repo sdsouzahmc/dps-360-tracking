@@ -263,6 +263,39 @@ def day_absent(date, con=None):
                                                    (date,), con)}
 
 
+def on_campus_at(date, at=None, con=None):
+    """Students on campus at a point in time (any day): last campus move at or before `at` is IN (gate or bus-bay hand-over),
+    plus children marked present in class by then with no exit scan (forgot the card). Returns rows sorted by class, section, name."""
+    at = at or (db.now() if date == db.today() else datetime.strptime(date + " 23:59:59", "%Y-%m-%d %H:%M:%S"))
+    at_s = at.strftime("%Y-%m-%d %H:%M:%S")
+    last = {r["pid"]: r for r in q("""SELECT cm.pid, cm.dir, cm.gate, cm.method, cm.ref, cm.ts FROM campus_moves cm
+                                      JOIN (SELECT pid, MAX(ts) mts FROM campus_moves WHERE ptype='STUDENT' AND date=? AND ts<=? GROUP BY pid) x
+                                        ON x.pid=cm.pid AND x.mts=cm.ts
+                                      WHERE cm.ptype='STUDENT' AND cm.date=?""", (date, at_s, date), con)}
+    first = {r["pid"]: r for r in q("""SELECT pid, MIN(ts) ts FROM campus_moves WHERE ptype='STUDENT' AND date=? AND dir='IN' AND ts<=? GROUP BY pid""",
+                                    (date, at_s), con)}
+    att = {r["student_id"]: r for r in q("SELECT student_id, status, ts FROM attendance WHERE date=? AND (ts IS NULL OR ts<=?)", (date, at_s), con)}
+    studs = q("""SELECT s.id, s.code, s.name, s.class_name, s.section, s.batch, s.grp, s.transport, s.gender,
+                        (SELECT b.code FROM badges b WHERE b.student_id=s.id AND b.status='ACTIVE' LIMIT 1) card,
+                        (SELECT st.name FROM classes c JOIN staff st ON st.id=c.teacher_id WHERE c.name=s.class_name AND c.section=s.section) teacher
+                 FROM students s WHERE s.active=1""", (), con)
+    out = []
+    for s_ in studs:
+        m = last.get(s_["id"])
+        a = att.get(s_["id"])
+        if m and m["dir"] == "IN":
+            how = f"Bus {m['ref']}" if m["method"] == "BUS" else f"{m['gate']}"
+            since = (first.get(s_["id"]) or m)["ts"]
+        elif not m and a and a["status"] in ("PRESENT", "LATE") and at.strftime("%H:%M") < student_group_times(s_["batch"], s_["grp"])[1][1]:
+            how, since = "In class (no gate scan)", a["ts"] or ""
+        else:
+            continue
+        out.append({**s_, "arrived": since, "via": how, "class_mark": (a or {}).get("status", "")})
+    grade_no = lambda c: (0 if str(c).startswith("KG") else 1, int("".join(ch for ch in str(c) if ch.isdigit()) or 0), str(c))
+    out.sort(key=lambda r: (grade_no(r["class_name"]), r["section"] or "", r["name"]))
+    return out
+
+
 def presence(date=None, now=None, con=None):
     """Every active student's state right now: ON_CAMPUS, ON_BUS, LEFT (went home / collected), ABSENT, NOT_ARRIVED, UNACCOUNTED."""
     date = date or db.today()
