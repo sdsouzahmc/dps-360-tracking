@@ -17,22 +17,30 @@ U.css()
 user = st.session_state.user
 role = user["role"]
 
-c_sp, c_view, c_live = st.columns([4, 3, 1], vertical_alignment="center")
-view = c_view.segmented_control("View", ["Today", "Last school days"], default="Today", key="d360_view", label_visibility="collapsed") or "Today"
+from datetime import date as _date
+c_sp, c_day, c_view, c_live = st.columns([2.2, 1.6, 3, 1], vertical_alignment="center")
+_today = _date.fromisoformat(db.today())
+SEL = c_day.date_input("Day", value=_today, max_value=_today, key="d360_day", label_visibility="collapsed",
+                       help="Pick a previous school day to see its exact picture (read-only)").isoformat()
+view = c_view.segmented_control("View", ["Day", "Last school days"], default="Day", key="d360_view", label_visibility="collapsed") or "Day"
 live = c_live.toggle("Live", value=True, help="Refresh every 20 seconds (TV mode)")
 
 
-def hero():
+def hero(D=None):
+    D = D or db.today()
+    past = D != db.today()
     n, t, state = U.session_now()
     now = db.now()
     off = db.clock_offset()
-    if True:
-        st.markdown(
-            f"<div class='hero'><div><div class='ttl'>DPS 360 Command Centre</div>"
-            f"<div class='sub'>{db.setting('school_name', db.SCHOOL_NAME)} · students, buses, gates, classes and safety in one view</div>"
-            f"<div class='sess'>🚌 Trip {n} · {t['short']} · {t['window'][0]}–{t['window'][1]} · {'running now' if state == 'running' else 'next'}</div></div>"
-            f"<div class='clock'><b>{now:%H:%M}</b>{now:%A %d %b %Y}"
-            + (f"<div class='sess'>⏱ demo clock</div>" if abs(off) > 60 else "") + "</div></div>", unsafe_allow_html=True)
+    day = datetime.strptime(D, "%Y-%m-%d")
+    sess = (f"<div class='sess'>📅 Snapshot of {day:%A %d %b %Y} — end of day, read-only</div>" if past else
+            f"<div class='sess'>🚌 Trip {n} · {t['short']} · {t['window'][0]}–{t['window'][1]} · {'running now' if state == 'running' else 'next'}</div>")
+    clock = (f"<b>{day:%d %b}</b>{day:%A %Y}" if past else f"<b>{now:%H:%M}</b>{now:%A %d %b %Y}")
+    st.markdown(
+        f"<div class='hero'><div><div class='ttl'>DPS 360 Command Centre</div>"
+        f"<div class='sub'>{db.setting('school_name', db.SCHOOL_NAME)} · students, buses, gates, classes and safety in one view</div>{sess}</div>"
+        f"<div class='clock'>{clock}" + (f"<div class='sess'>⏱ demo clock</div>" if abs(off) > 60 and not past else "") + "</div></div>",
+        unsafe_allow_html=True)
 
 
 def series_today(D, now):
@@ -64,10 +72,11 @@ def series_today(D, now):
     return pd.DataFrame(out)
 
 
-def board():
-    hero()
-    D = db.today()
-    now = db.now()
+def board(D=None):
+    D = D or db.today()
+    past = D != db.today()
+    hero(D)
+    now = db.now() if not past else datetime.strptime(f"{D} 23:59:59", "%Y-%m-%d %H:%M:%S")
     pres = campus.presence(D, now)
     cnt = Counter(pres.values())
     tot = len(pres)
@@ -84,35 +93,51 @@ def board():
     ncls = db.q1("SELECT COUNT(*) n FROM classes")["n"]
     due_cls = db.q1("SELECT COUNT(*) n FROM classes WHERE shift=1")["n"] + (db.q1("SELECT COUNT(*) n FROM classes WHERE shift=2")["n"]
                                                                            if now.strftime("%H:%M") >= "13:10" else 0)
+    arrived = db.q1("SELECT COUNT(DISTINCT pid) n FROM campus_moves WHERE ptype='STUDENT' AND date=? AND dir='IN'", (D,))["n"]
+    by_bus = db.q1("""SELECT COUNT(DISTINCT m.student_id) n FROM manifest m JOIN trip_runs r ON r.id=m.run_id WHERE r.date=? AND m.entry_ts IS NOT NULL""",
+                   (D,))["n"]
+    staff_day = db.q1("SELECT COUNT(DISTINCT pid) n FROM gate_scans WHERE ptype='STAFF' AND date=? AND dir='IN'", (D,))["n"]
     vis = campus.visitors(D)
     vis_on = [v for v in vis if v["status"] == "ON_CAMPUS"]
     staff_in = sum(1 for m in campus.last_moves(D, "STAFF").values() if m["dir"] == "IN")
     al = campus.alerts(D, "OPEN")
     al_hi = [a for a in al if a["severity"] in ("HIGH", "CRITICAL")]
 
+    if past:
+        U.kpis([
+            ("STUDENTS ENROLLED", tot, f"{stu['b']:,} by bus · {tot - stu['b']:,} private", "#1B2559", ""),
+            ("ARRIVED ON CAMPUS", arrived, f"{arrived / max(1, tot):.0%} of students", "#2E9E5B", "green"),
+            ("TRAVELLED BY BUS", by_bus, f"{len({r['bus_id'] for r in runs})} buses ran", "#3D4FD6", ""),
+            ("GONE HOME", cnt["LEFT"], "end of day", "#9AA3BD", ""),
+            ("ABSENT", cnt["ABSENT"], f"{decl} declared by parents", "#E07A1F", "orange"),
+            ("NOT SEEN", cnt["NOT_SEEN"] + cnt["UNACCOUNTED"], "no scan, no absence", "#D93025", "red" if cnt["NOT_SEEN"] else "green"),
+        ])
+    else:
+        U.kpis([
+            ("STUDENTS ENROLLED", tot, f"{stu['b']:,} by bus · {tot - stu['b']:,} private", "#1B2559", ""),
+            ("ON CAMPUS NOW", cnt["ON_CAMPUS"], f"{cnt['ON_CAMPUS'] / max(1, tot):.0%} of students", "#2E9E5B", "green"),
+            ("ON BUSES NOW", cnt["ON_BUS"], f"{len(active)} buses on the road", "#3D4FD6", ""),
+            ("GONE HOME", cnt["LEFT"], "dropped / collected / left", "#9AA3BD", ""),
+            ("ABSENT TODAY", cnt["ABSENT"], f"{decl} declared by parents", "#E07A1F", "orange"),
+            ("UNACCOUNTED", cnt["UNACCOUNTED"], "not on campus, bus or absence list", "#D93025", "red" if cnt["UNACCOUNTED"] else "green"),
+        ])
     U.kpis([
-        ("STUDENTS ENROLLED", tot, f"{stu['b']:,} by bus · {tot - stu['b']:,} private", "#1B2559", ""),
-        ("ON CAMPUS NOW", cnt["ON_CAMPUS"], f"{cnt['ON_CAMPUS'] / max(1, tot):.0%} of students", "#2E9E5B", "green"),
-        ("ON BUSES NOW", cnt["ON_BUS"], f"{len(active)} buses on the road", "#3D4FD6", ""),
-        ("GONE HOME", cnt["LEFT"], "dropped / collected / left", "#9AA3BD", ""),
-        ("ABSENT TODAY", cnt["ABSENT"], f"{decl} declared by parents", "#E07A1F", "orange"),
-        ("UNACCOUNTED", cnt["UNACCOUNTED"], "not on campus, bus or absence list", "#D93025", "red" if cnt["UNACCOUNTED"] else "green"),
-    ])
-    U.kpis([
-        ("BUS TRIPS TODAY", f"{closed}/{planned_total}", f"{len(active)} running · {planned_total - closed - len(active)} to go", "#3D4FD6", ""),
-        ("ON-TIME STARTS", f"{ontime / max(1, len(runs)):.0%}", f"{len(runs) - ontime} late of {len(runs)} started", "#2E9E5B", ""),
-        ("ATTENDANCE SUBMITTED", f"{subm}/{ncls}", f"{max(0, due_cls - subm)} classes due, not in" if due_cls > subm else "all due classes in",
-         "#7B5CD6", "orange" if due_cls - subm > 3 else ""),
-        ("VISITORS ON CAMPUS", len(vis_on), f"{len(vis)} today · {sum(1 for a in al if a['kind'] == 'VISITOR_OVERSTAY')} overstay",
+        ("BUS TRIPS" + ("" if past else " TODAY"), f"{closed}/{len(runs) if past else planned_total}",
+         f"{closed} closed" if past else f"{len(active)} running · {planned_total - closed - len(active)} to go", "#3D4FD6", ""),
+        ("ON-TIME STARTS", f"{ontime / max(1, len(runs)):.0%}" if runs else "0%", f"{len(runs) - ontime} late of {len(runs)} started", "#2E9E5B", ""),
+        ("ATTENDANCE SUBMITTED", f"{subm}/{ncls}", (f"{max(0, due_cls - subm)} classes due, not in" if due_cls > subm else "all due classes in")
+         if not past else f"{ncls - subm} classes did not submit", "#7B5CD6", "orange" if due_cls - subm > 3 and not past else ""),
+        ("VISITORS" + ("" if past else " ON CAMPUS"), len(vis) if past else len(vis_on),
+         f"{sum(1 for a in al if a['kind'] == 'VISITOR_OVERSTAY')} overstay" if past else f"{len(vis)} today · {sum(1 for a in al if a['kind'] == 'VISITOR_OVERSTAY')} overstay",
          "#0F9BB5", ""),
-        ("STAFF ON CAMPUS", staff_in, "card in at staff gate", "#1B2559", ""),
-        ("OPEN ALERTS", len(al), f"{len(al_hi)} high priority", "#D93025", "red" if al_hi else ""),
+        ("STAFF" + (" IN" if past else " ON CAMPUS"), staff_day if past else staff_in, "card in at staff gate", "#1B2559", ""),
+        ("OPEN ALERTS" if not past else "ALERTS LEFT OPEN", len(al), f"{len(al_hi)} high priority", "#D93025", "red" if al_hi else ""),
     ])
 
     # ---------------------------------------------------------------- where are the students + headcount curve | alerts
     left, right = st.columns([1.75, 1])
     with left, st.container(border=True):
-        st.markdown("<div class='sect'>👥 Where every student is right now</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='sect'>👥 {'Where every student ended the day' if past else 'Where every student is right now'}</div>", unsafe_allow_html=True)
         order = ["ON_CAMPUS", "ON_BUS", "LEFT", "ABSENT", "NOT_ARRIVED", "UNACCOUNTED", "NOT_SEEN"]
         st.markdown("<div class='sbar'>" + "".join(f"<div style='width:{cnt[k] / max(1, tot) * 100:.2f}%;background:{U.STATE_COLOR[k]}' "
                                                     f"title='{U.STATE_LABEL[k]}: {cnt[k]}'></div>" for k in order if cnt[k]) + "</div>"
@@ -340,8 +365,8 @@ def trends():
 def live_board():
     import dps_data
     dps_data.tick()
-    if view == "Today":
-        board()
+    if view == "Day":
+        board(SEL)
     else:
         trends()
 

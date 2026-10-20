@@ -555,7 +555,7 @@ def build_day(date, seed=None):
             _patrol(E, r, planned, "Night patrol", k + 1, cp, GUARDS[k % 2])
     for k, hm in enumerate(["00:00", "02:00", "04:00"]):
         for cp_i, cp in enumerate(cps):
-            _patrol(E, r, _t(date, hm, cp_i * 300), "Night patrol", k + 4, cp, GUARDS[k % 2])
+            _patrol(E, r, _t(date, hm, cp_i * 300), "Night patrol", k + 4, cp, GUARDS[k % 2], pdate=prev)   # part of last night's plan
     for k, hm in enumerate(["06:00", "08:00", "10:00", "12:00", "14:00", "16:00"]):
         for cp_i, cp in enumerate(cps):
             _patrol(E, r, _t(date, hm, cp_i * 300), "Day patrol", k + 1, cp, GUARDS[2 + k % 3])
@@ -563,14 +563,16 @@ def build_day(date, seed=None):
     return ev
 
 
-def _patrol(E, r, planned, plan, rnd_no, cp, guard):
+def _patrol(E, r, planned, plan, rnd_no, cp, guard, pdate=None):
     x_ = r.random()
+    pdate = pdate or planned.strftime("%Y-%m-%d")
     if x_ < 0.035:
-        E(planned + timedelta(minutes=20), "PATROL", plan=plan, round_no=rnd_no, cp=cp, guard=guard, planned=ts(planned), actual=None, status="OMITTED")
+        E(planned + timedelta(minutes=20), "PATROL", plan=plan, round_no=rnd_no, cp=cp, guard=guard, planned=ts(planned), actual=None, status="OMITTED",
+          pdate=pdate)
     else:
         act = planned + timedelta(minutes=r.uniform(-3, 6) if x_ > 0.09 else r.uniform(12, 25))
         E(act, "PATROL", plan=plan, round_no=rnd_no, cp=cp, guard=guard, planned=ts(planned), actual=ts(act),
-          status="ARRIVED" if x_ > 0.09 else "LATE")
+          status="ARRIVED" if x_ > 0.09 else "LATE", pdate=pdate)
 
 
 # ====================================================================== apply
@@ -777,9 +779,9 @@ def _apply(con, events, notify=True, rnd=None):
             elif kind == "PATROL":
                 con.execute("""INSERT INTO patrol_rounds(date, plan, round_no, checkpoint, guard, planned_ts, actual_ts, status, note, source, site)
                                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                            (d["planned"][:10], d["plan"], d["round_no"], d["cp"], d["guard"], d["planned"], d["actual"], d["status"],
+                            (d.get("pdate") or d["planned"][:10], d["plan"], d["round_no"], d["cp"], d["guard"], d["planned"], d["actual"], d["status"],
                              "Checkpoint not scanned" if d["status"] == "OMITTED" else "", "Patrol app (demo feed)", "DPS Main campus"))
-                if d["status"] == "OMITTED" and d["planned"][:10] == date:
+                if d["status"] == "OMITTED" and (d.get("pdate") or d["planned"][:10]) == date:
                     campus.raise_alert("PATROL_MISSED", "LOW", f"{d['plan']} round {d['round_no']}: {d['cp']} not scanned by {d['guard']}",
                                        date, None, "PATROL", None, audience="security", when=when, con=con)
         except Exception as ex:      # one bad event must never stop the day
@@ -846,7 +848,7 @@ def prepare_today(now=None):
 def tick(now=None, limit=20000):
     """Apply the simulated events that have fallen due (called on every page load; cheap when nothing is due)."""
     now = now or db.now()
-    if db.setting("sim_paused") == "1":
+    if db.setting("sim_paused") == "1" or db.setting("sim_off_day") == now.strftime("%Y-%m-%d"):
         return 0
     if db.setting("sim_day") != now.strftime("%Y-%m-%d"):
         return prepare_today(now)
@@ -870,9 +872,8 @@ def tick(now=None, limit=20000):
         _LOCK.release()
 
 
-def replay_today_at(hm):
-    """Demo clock: rebuild today's data as it stood at hh:mm (removes today's live data, then re-applies the script up to that time)."""
-    date = db.today()
+def _wipe_today(date):
+    """Remove every record of today's activity (previous days are never touched)."""
     with _LOCK:
         con = db.connect()
         try:
@@ -884,16 +885,37 @@ def replay_today_at(hm):
             con.execute(f"DELETE FROM sim_runs WHERE run_id IN ({ph})", run_ids)
             for tbl, col in (("trip_runs", "date"), ("gate_scans", "date"), ("visitors", "date"), ("attendance", "date"), ("att_submissions", "date"),
                              ("campus_alerts", "date"), ("early_pickups", "date"), ("vehicle_checks", "date"), ("patrol_rounds", "date"),
-                             ("absences", "date"), ("sim_noscan", "date")):
+                             ("absences", "date"), ("sim_noscan", "date"), ("change_requests", "date")):
                 con.execute(f"DELETE FROM {tbl} WHERE {col}=?", (date,))
-            con.execute("DELETE FROM incidents WHERE ts LIKE ?", (date + "%",))
-            con.execute("DELETE FROM notifications WHERE ts LIKE ?", (date + "%",))
-            con.execute("DELETE FROM change_requests WHERE date=?", (date,))
+            for tbl in ("incidents", "notifications"):
+                con.execute(f"DELETE FROM {tbl} WHERE ts LIKE ?", (date + "%",))
+            for tbl, col in (("bus_messages", "ts"), ("route_plans", "date")):
+                try:
+                    con.execute(f"DELETE FROM {tbl} WHERE {col} LIKE ?", (date + "%",))
+                except Exception:
+                    pass
             con.execute("DELETE FROM sim_events")
-            con.execute("DELETE FROM settings WHERE key='sim_day'")
+            con.execute("DELETE FROM settings WHERE key IN ('sim_day', 'sim_off_day')")
             con.commit()
         finally:
             con.close()
+
+
+def clear_today(user="admin"):
+    """Start today from zero: all of today's activity removed and the simulated day switched off for today,
+    so every total is zero except students enrolled. Tomorrow the simulation runs again."""
+    date = db.today()
+    _wipe_today(date)
+    db.set_setting("sim_off_day", date)
+    db.set_setting("sim_day", date)
+    db.audit(user, "admin", "TEST_RESET_DAY_ZERO", "day", date, "today cleared, simulation off for today")
+    return True
+
+
+def replay_today_at(hm):
+    """Demo clock: rebuild today's data as it stood at hh:mm (removes today's live data, then re-applies the script up to that time)."""
+    date = db.today()
+    _wipe_today(date)
     real = db.now() - timedelta(seconds=db.clock_offset())
     if hm == "now":
         db.set_clock_offset(0)

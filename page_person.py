@@ -98,8 +98,8 @@ with right:
         for m in msgs:
             st.markdown(f"`{m['ts'][11:16]}` {m['message']}")
 
-if st.session_state.user["role"] in ("admin", "manager"):
-    with st.expander("🧹 Test reset for this student"):
+if st.session_state.user["role"] in ("admin", "manager") and day == D:
+    with st.expander("🧹 Test reset for this student (today)"):
         import resets as R_
         pv = R_.student_preview(sid, day)
         st.caption(f"Clean {s['name']}'s day ({day}): " + ", ".join(f"{k} {v}" for k, v in pv.items() if v) if any(pv.values()) else "Nothing recorded for this day.")

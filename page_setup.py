@@ -418,8 +418,9 @@ with tabs[10]:
     else:
         bl_ = db.buses()
         r1, r2, r3 = st.columns([1, 1, 1.4])
-        rdate = r1.date_input("Date *", value=None, key="rs_date", format="YYYY/MM/DD",
-                              help="Required. Pick the date whose trips you want to reset.")
+        rdate = r1.date_input("Date *", value=date.fromisoformat(db.today()), min_value=date.fromisoformat(db.today()),
+                              max_value=date.fromisoformat(db.today()), key="rs_date", format="YYYY/MM/DD",
+                              help="Only today's trips can be reset. Previous days are kept as a record.")
         bopt = [None] + [b["id"] for b in bl_]
         rbus = r2.selectbox("Bus", bopt, key="rs_bus",
                             format_func=lambda i: "All buses" if i is None else next(b["bus_no"] for b in bl_ if b["id"] == i))
@@ -489,7 +490,9 @@ with tabs[11]:
     if role not in ("admin", "manager"):
         st.info("Only the administrator or transport lead can use test resets.")
     else:
-        _D = st.date_input("Date", value=date.fromisoformat(db.today()), key="tr_date").isoformat()
+        _D = db.today()
+        st.markdown(f"<span class='pill'>Today {_D}</span> &nbsp;<span class='muted'>Resets only change today. Previous days are kept exactly as they were.</span>",
+                    unsafe_allow_html=True)
         what = st.segmented_control("Reset", ["Student", "Class attendance", "Bus (whole day)", "Vehicle check", "Staff", "Visitors",
                                               "Early pickups", "Alerts", "Parent requests", "Bus assignments", "Whole day"],
                                     default="Student", key="tr_what") or "Student"
@@ -601,16 +604,23 @@ with tabs[11]:
                     st.session_state.tr_msg = ("ok", f"{n1} one-day move(s) removed, {n2} permanent move(s) restored.")
                     st.rerun()
             elif what == "Whole day":
-                st.caption("Rebuilds TODAY from the simulated day script up to the current time: all of today's trips, scans, gate scans, attendance, "
-                           "visitors, early pickups, alerts and checks are removed and replayed. Affects BOTH teams — agree it first.")
+                mode_ = st.radio("How", ["zero", "replay"], key="tr_wdmode", format_func={
+                    "zero": "Start today from ZERO — remove all of today's activity; every total is 0 except students enrolled (simulation off for today)",
+                    "replay": "Rebuild today with simulated activity up to now"}.get)
+                st.caption("Removes all of today's trips, scans, gate scans, attendance, visitors, early pickups, alerts, checks, patrol rounds, "
+                           "absences, requests and messages. Previous days are not touched. Affects BOTH teams — agree it first.")
                 rel = st.checkbox("Also release buses that were reset for manual testing today (reserved test buses BUS-001 / BUS-026 stay manual)",
                                   key="tr_rel")
-                if st.button("Rebuild today now", type="primary", disabled=not _confirm("wd") or _D != db.today(), key="tr_wdgo"):
+                if st.button("Reset today", type="primary", disabled=not _confirm("wd"), key="tr_wdgo"):
                     if rel:
                         R_.release_manual_buses(user["username"])
-                    with st.spinner("Rebuilding today…"):
-                        _dd.replay_today_at("now")
-                    db.audit(user["username"], role, "TEST_RESET_DAY", "day", _D, "rebuilt to now")
-                    st.session_state.tr_msg = ("ok", "Today rebuilt up to now.")
+                    with st.spinner("Resetting today…"):
+                        if mode_ == "zero":
+                            _dd.clear_today(user["username"])
+                        else:
+                            _dd.replay_today_at("now")
+                            db.audit(user["username"], role, "TEST_RESET_DAY", "day", _D, "rebuilt to now")
+                    st.session_state.tr_msg = ("ok", "Today starts from zero — only students enrolled are counted. Use 'Rebuild today' to bring the "
+                                               "simulated day back." if mode_ == "zero" else "Today rebuilt up to now.")
                     st.rerun()
                 st.caption("Everything from scratch (all days, all data): Data source tab → Regenerate the DPS demo.")

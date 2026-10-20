@@ -250,6 +250,12 @@ def presence(date=None, now=None, con=None):
     now = now or db.now()
     nowhm = now.strftime("%H:%M") if date == db.today() else "23:59"
     studs = q("SELECT id, batch, grp, transport FROM students WHERE active=1", (), con)
+    # test mode (today started from zero): only children whose pickup bus has finished its trip can be 'unaccounted'
+    test_mode = db.setting("sim_off_day", None, con) == date
+    closed_pick = set()
+    if test_mode:
+        closed_pick = {r["student_id"] for r in q("""SELECT m.student_id FROM manifest m JOIN trip_runs r ON r.id=m.run_id
+                                                     WHERE r.date=? AND r.status='CLOSED' AND m.purpose='PICKUP'""", (date,), con)}
     moves, bus, absent = last_moves(date, con=con), onboard_now(date, con), day_absent(date, con)
     att = {r["student_id"]: r["status"] for r in q("SELECT student_id, status FROM attendance WHERE date=?", (date,), con)}
     att_abs = {k for k, v in att.items() if v == "ABSENT"}
@@ -272,6 +278,8 @@ def presence(date=None, now=None, con=None):
                 st = "ON_CAMPUS" if nowhm < d1 else "LEFT"
             else:
                 st = "UNACCOUNTED" if late_cut <= nowhm < d0 else "NOT_ARRIVED" if nowhm < late_cut else "NOT_SEEN"
+                if test_mode and sid not in closed_pick:
+                    st = "NOT_ARRIVED"
         out[sid] = st
     return out
 
