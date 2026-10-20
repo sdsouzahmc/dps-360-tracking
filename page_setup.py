@@ -494,7 +494,7 @@ with tabs[11]:
         st.markdown(f"<span class='pill'>Today {_D}</span> &nbsp;<span class='muted'>Resets only change today. Previous days are kept exactly as they were.</span>",
                     unsafe_allow_html=True)
         what = st.segmented_control("Reset", ["Student", "Class attendance", "Bus (whole day)", "Vehicle check", "Staff", "Visitors",
-                                              "Early pickups", "Alerts", "Parent requests", "Bus assignments", "Whole day"],
+                                              "Early pickups", "Security patrol", "Alerts", "Parent requests", "Bus assignments", "Whole day"],
                                     default="Student", key="tr_what") or "Student"
 
         def _confirm(key):
@@ -578,6 +578,20 @@ with tabs[11]:
                 if st.button("Reset early pickup(s)", type="primary", disabled=not _confirm("ep"), key="tr_epgo"):
                     n_ = R_.reset_early_pickups(_D, user["username"], epk)
                     st.session_state.tr_msg = ("ok", f"{n_} early-pickup request(s) removed.")
+                    st.rerun()
+            elif what == "Security patrol":
+                pv_ = R_.patrol_preview(_D)
+                st.caption(f"{sum(r['n'] for r in pv_)} patrol record(s) on {_D}"
+                           + (": " + " · ".join(f"{r['plan']} ({r['source'] or 'app'}) {r['n']}" for r in pv_) if pv_ else ".")
+                           + " Night rounds after midnight belong to the evening the shift started.")
+                pl_ = st.selectbox("Plan", [None] + sorted({r["plan"] for r in pv_}), format_func=lambda x: "All plans" if x is None else x, key="tr_ppl")
+                so_ = st.selectbox("Source", [None] + sorted({r["source"] for r in pv_}),
+                                   format_func=lambda x: "All sources (app rounds and uploaded files)" if x is None else (x or "Patrol app"), key="tr_pso")
+                st.caption("Removes the checkpoint scans and their 'patrol checkpoint missed' alerts, so the Security patrols dashboard starts from zero "
+                           "(or only the chosen plan / upload). You can upload the patrol file again afterwards.")
+                if st.button("Reset security patrol", type="primary", disabled=not _confirm("pt"), key="tr_ptgo"):
+                    n_, a_ = R_.reset_patrol(_D, user["username"], pl_, so_)
+                    st.session_state.tr_msg = ("ok", f"{n_} patrol record(s) and {a_} missed-checkpoint alert(s) removed.")
                     st.rerun()
             elif what == "Alerts":
                 kinds = sorted({a["kind"] for a in db.q("SELECT DISTINCT kind FROM campus_alerts WHERE date=?", (_D,))})

@@ -123,6 +123,34 @@ def reset_visitors(date, user, only_open=False):
     return n
 
 
+def patrol_preview(date, con=None):
+    """Patrol records on a day by plan and source (for the reset screens)."""
+    return q("""SELECT plan, COALESCE(source, '') source, COUNT(*) n FROM patrol_rounds WHERE date=? GROUP BY plan, source ORDER BY plan, source""",
+             (date,), con)
+
+
+def reset_patrol(date, user, plan=None, source=None):
+    """Remove a day's security-patrol records (all, one plan, or one source such as an uploaded export) and their missed-checkpoint alerts."""
+    cond, args = "date=?", [date]
+    if plan:
+        cond += " AND plan=?"
+        args.append(plan)
+    if source:
+        cond += " AND COALESCE(source, '')=?"
+        args.append(source)
+    with db.tx() as c:
+        n = c.execute(f"DELETE FROM patrol_rounds WHERE {cond}", args).rowcount
+        acond, aargs = "date=? AND kind='PATROL_MISSED'", [date]
+        if plan:
+            acond += " AND details LIKE ?"
+            aargs.append(plan + "%")
+        # missed-checkpoint alerts come from the patrol app feed; an uploaded file raises none, so leave them when only an upload is reset
+        a = 0 if (source and "app" not in source.lower()) else c.execute(f"DELETE FROM campus_alerts WHERE {acond}", aargs).rowcount
+        _audit(c, user, "TEST_RESET_PATROL", "patrol", date,
+               f"{n} patrol record(s), {a} missed-checkpoint alert(s)" + (f" · plan {plan}" if plan else "") + (f" · source {source}" if source else ""))
+    return n, a
+
+
 def reset_early_pickups(date, user, student_id=None):
     with db.tx() as c:
         rows = q("SELECT * FROM early_pickups WHERE date=?" + (" AND student_id=?" if student_id else ""), (date, student_id) if student_id else (date,), c)

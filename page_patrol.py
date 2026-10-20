@@ -255,3 +255,24 @@ with c5, st.container(border=True):
         tooltip=["Day", "State", "n"])
     st.altair_chart(ch.properties(height=230), width="stretch")
     st.caption(f"{int(bdf[bdf.State == 'Open'].n.sum())} open · {int(bdf[bdf.State == 'Resolved'].n.sum())} resolved (security alerts incl. missed checkpoints)")
+
+
+# ------------------------------------------------------------------ test reset (today only, admin / transport lead)
+if st.session_state.get("user", {}).get("role") in ("admin", "manager") and day == TODAY:
+    import resets as R_
+    with st.expander("🧹 Reset today's security patrol (testing)"):
+        if st.session_state.get("pat_rs_msg"):
+            st.success(st.session_state.pop("pat_rs_msg"))
+        pv_ = R_.patrol_preview(day)
+        st.caption(f"{sum(r['n'] for r in pv_)} patrol record(s) today"
+                   + (": " + " · ".join(f"{r['plan']} ({r['source'] or 'app'}) {r['n']}" for r in pv_) if pv_ else ".")
+                   + " Previous days are never changed.")
+        so_ = st.selectbox("What", [None] + sorted({r["source"] for r in pv_}),
+                           format_func=lambda x: "Everything today (app rounds and uploaded files)" if x is None else (f"Only '{x}'" if x else "Only patrol-app rounds"),
+                           key="pat_rs_src")
+        if st.checkbox("I understand this removes today's patrol records and their missed-checkpoint alerts", key="pat_rs_ok") and \
+                st.button("Reset security patrol", type="primary", key="pat_rs_go"):
+            n_, a_ = R_.reset_patrol(day, st.session_state.user["username"], None, so_)
+            st.session_state.pat_rs_msg = f"Removed {n_} patrol record(s) and {a_} missed-checkpoint alert(s). Upload the patrol file again if needed."
+            st.rerun()
+
