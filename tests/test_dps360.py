@@ -167,7 +167,8 @@ def test_fn18_overstay_alert():
 # ---------------------------------------------------------------- early pickup
 def test_fn19_early_pickup_full_flow():
     s = db.q1("SELECT * FROM students WHERE transport='BUS' AND grp='Main' AND id NOT IN (SELECT student_id FROM early_pickups) LIMIT 1")
-    eid = campus.request_early(s["id"], D(), "11:00", "Doctor", "Pytest Father", "Father", "+974 5", "284", "g")
+    par = db.q1("SELECT g.name FROM guardians g JOIN student_guardians sg ON sg.guardian_id=g.id WHERE sg.student_id=?", (s["id"],))
+    eid = campus.request_early(s["id"], D(), "11:00", "Doctor", par["name"], "Father", "+974 5", "284", "g")   # a parent: on the allowed list
     ok, m = campus.decide_early(eid, True, "t")
     assert ok and "pass" in m
     assert E.is_absent(s["id"], D(), 3, None)                       # off the 2:00 pm home bus
