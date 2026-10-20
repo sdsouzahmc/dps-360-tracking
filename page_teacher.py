@@ -18,8 +18,19 @@ if not cls:
     allc = db.q("SELECT c.*, s.name AS teacher FROM classes c LEFT JOIN staff s ON s.id=c.teacher_id ORDER BY c.shift, c.id")
     if role == "teacher":
         st.warning("You are not a class teacher — choose a class to take attendance for.")
-    cid = st.selectbox("Class", [c["id"] for c in allc], format_func=lambda i: next(f"{c['name']}-{c['section']} · {c['teacher']}" for c in allc
-                                                                                 if c["id"] == i), key="t_cls")
+    _q = st.text_input("Find a student's class", placeholder="Student name or ID", key="t_find")
+    _pre = None
+    if _q.strip():
+        _h = db.q1("SELECT class_name, section, name FROM students WHERE active=1 AND (name LIKE ? OR code=?) ORDER BY name LIMIT 1",
+                   (f"%{_q.strip()}%", _q.strip().upper()))
+        if _h:
+            _pre = next((c["id"] for c in allc if c["name"] == _h["class_name"] and c["section"] == _h["section"]), None)
+            st.caption(f"{_h['name']} is in {_h['class_name']}-{_h['section']} — class teacher login "
+                       f"`{db.teacher_login(_h['class_name'], _h['section'])}` (PIN 1234 in the demo).")
+    ids_ = [c["id"] for c in allc]
+    cid = st.selectbox("Class", ids_, index=ids_.index(_pre) if _pre in ids_ else 0,
+                       format_func=lambda i: next(f"{c['name']}-{c['section']} · {c['teacher']} · login {db.teacher_login(c['name'], c['section'])}"
+                                                  for c in allc if c["id"] == i), key=f"t_cls{_pre or ''}")
     cls = db.q1("SELECT * FROM classes WHERE id=?", (cid,))
 teacher = db.staff_name(cls["teacher_id"])
 arrive_by = campus.SHIFT_TIMES[cls["shift"]][1]

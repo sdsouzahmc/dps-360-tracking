@@ -195,6 +195,7 @@ def login():
 | Transport lead (all modules) | `manager` | manager123 |
 | Security / gate | `security`, `guard1` | 1234 |
 | Teacher (Grade 5-A) | `teacher1` | 1234 |
+| Any class teacher: t + grade + section | `t5a`, `tkg1a`, `t12j` … | 1234 |
 | Parent | `g001` … `g040` | 1234 |
 | Bus supervisor / driver | `sup001` / `drv001` | 1234 |
 | Fleet approvers: supervisor, senior manager, VP | `fleetsup`, `srmanager`, `vp` | 1234 |""")

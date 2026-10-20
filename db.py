@@ -261,6 +261,12 @@ def init_db(reset=False, seed_data=True, **kw):
         seed_extras()
 
 
+def teacher_login(class_name, section):
+    """Class-teacher sign-in: 't' + grade + section, e.g. Grade 5-A → t5a, KG1-A → tkg1a (demo PIN 1234)."""
+    g = str(class_name).replace("Grade", "").replace(" ", "").lower()
+    return f"t{g}{str(section).lower()}"
+
+
 def seed_extras():
     """Fleet, security-extension and integration demo data + their sign-ins (idempotent; skipped on an empty school)."""
     if not q1("SELECT COUNT(*) n FROM buses")["n"]:
@@ -271,6 +277,9 @@ def seed_extras():
     fleet.seed()
     security_ext.seed()
     integrations.seed_telematics()
+    for c in q("""SELECT c.name, c.section, c.teacher_id, s.name tname FROM classes c JOIN staff s ON s.id=c.teacher_id WHERE c.teacher_id IS NOT NULL"""):
+        x("INSERT OR IGNORE INTO users(username, pin_hash, role, staff_id, display_name) VALUES (?,?,?,?,?)",
+          (teacher_login(c["name"], c["section"]), pin_hash("1234"), "teacher", c["teacher_id"], f"{c['tname']} ({c['name']}-{c['section']})"))
     for u, role, name in (("fleetsup", "fleet_supervisor", "Fleet supervisor"), ("srmanager", "senior_manager", "Senior Manager (Facilities)"),
                           ("vp", "vp", "Vice President")):
         x("INSERT OR IGNORE INTO users(username, pin_hash, role, display_name) VALUES (?,?,?,?)", (u, pin_hash("1234"), role, name))

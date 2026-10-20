@@ -46,7 +46,8 @@ with left:
         st.markdown(f"<div style='display:flex;gap:16px;align-items:center'>{campus.avatar_img(s['id'], s['gender'], 'STUDENT', 120)}"
                     f"<div><div style='font-size:1.45rem;font-weight:800'>{s['name']}</div>"
                     f"<div class='muted'>{s['class_name']}-{s['section']} · {s['code']} · card {s['card'] or '—'}</div>"
-                    f"<div class='muted'>{db.mlabel(s['batch'], s['grp'])} · class teacher {s['teacher'] or '—'}</div>"
+                    f"<div class='muted'>{db.mlabel(s['batch'], s['grp'])} · class teacher {s['teacher'] or '—'} "
+                    f"(login <code>{db.teacher_login(s['class_name'], s['section'])}</code>)</div>"
                     + (f"<div style='margin-top:6px'>{U.pill(U.STATE_LABEL.get(pres, pres), 'green' if pres == 'ON_CAMPUS' else 'blue' if pres == 'ON_BUS' else 'red' if pres == 'UNACCOUNTED' else 'grey')}</div>" if pres else "")
                     + "</div></div>", unsafe_allow_html=True)
         st.markdown("**Transport**")
