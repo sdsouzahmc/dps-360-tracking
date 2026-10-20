@@ -5,6 +5,7 @@
   "reserved_buses": ["BUS-001", "BUS-026"],
   "actions": [
     {"id": "reset-bus001-2026-10-18", "type": "reset", "bus": "BUS-001", "date": "2026-10-18"},
-    {"id": "reset-bus026-2026-10-18", "type": "reset", "bus": "BUS-026", "date": "2026-10-18"}
+    {"id": "reset-bus026-2026-10-18", "type": "reset", "bus": "BUS-026", "date": "2026-10-18"},
+    {"id": "zero-today-2026-10-20", "type": "zero_today", "date": "2026-10-20"}
   ]
 }

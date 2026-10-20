@@ -969,6 +969,9 @@ def apply_maintenance(path=None):
             if b:
                 E.reset_trips(a["date"], "maintenance", "admin", bus_id=b["id"], include_closed=True)
                 n += 1
+        elif a.get("type") == "zero_today" and db.setting("sim_off_day") != a["date"]:
+            clear_today("maintenance")
+            n += 1
         done.add(a["id"])
     db.set_setting("maintenance_done", json.dumps(sorted(done)))
     return n
