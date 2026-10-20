@@ -32,6 +32,14 @@ Generated on first start (~20 s): ~4,800 students in 160 classes (≈3,400 by bu
 
 Demo sign-ins (PIN): `principal` 1234 · `manager` manager123 (+ on-screen code) · `security` / `guard1` 1234 · `teacher1` (Grade 5-A) 1234 · `g001`…`g040` 1234 · `sup001` / `drv001` 1234 · `admin` admin123.
 
+## Modules added for the DPS requirements (Oct 2026)
+
+- Security: bus inspection after every trip (rear-door tag, no child left behind, missed-inspection alerts), visitor blacklist, standing gate passes, collector photo check and allowed-list hold, "ready at the gate" message, scan-speed log.
+- Fleet maintenance & fuel: job orders with Supervisor → Manager → Senior Manager → VP approval, purchase orders, parts and stock, fuel log and efficiency, preventive service plans, vehicle and crew document wallet, driver behaviour.
+- Integrations & API: REST API (`api.py`, see API.md) for CSMS ERP, vehicle tracker, RFID readers and Woqod; CSMS and Woqod file import in Setup.
+
+Demo approvers (PIN 1234): fleetsup, srmanager, vp.
+
 ## Run
 ```
 pip install -r requirements.txt

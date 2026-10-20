@@ -1,0 +1,1571 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "DPS 360 API",
+  "description": "Student, transport, gate, fleet and security data for DPS-Modern Indian School. All times are Qatar time (YYYY-MM-DD HH:MM:SS). Authenticate with the X-API-Key header.",
+  "version": "1.0"
+ },
+ "paths": {
+  "/health": {
+   "get": {
+    "tags": [
+     "system"
+    ],
+    "summary": "Health",
+    "operationId": "health_health_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/students": {
+   "get": {
+    "tags": [
+     "students"
+    ],
+    "summary": "Students",
+    "operationId": "students_v1_students_get",
+    "parameters": [
+     {
+      "name": "active",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "default": true,
+       "title": "Active"
+      }
+     },
+     {
+      "name": "transport",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(BUS|PRIVATE)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Transport"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 5000,
+       "default": 500,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 0,
+       "title": "Offset"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/students/{code}": {
+   "get": {
+    "tags": [
+     "students"
+    ],
+    "summary": "Student",
+    "operationId": "student_v1_students__code__get",
+    "parameters": [
+     {
+      "name": "code",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Code"
+      }
+     },
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/presence": {
+   "get": {
+    "tags": [
+     "students"
+    ],
+    "summary": "Presence",
+    "operationId": "presence_v1_presence_get",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/buses": {
+   "get": {
+    "tags": [
+     "transport"
+    ],
+    "summary": "Buses",
+    "operationId": "buses_v1_buses_get",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/trips": {
+   "get": {
+    "tags": [
+     "transport"
+    ],
+    "summary": "Trips",
+    "operationId": "trips_v1_trips_get",
+    "parameters": [
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/trips/{run_id}/manifest": {
+   "get": {
+    "tags": [
+     "transport"
+    ],
+    "summary": "Manifest",
+    "operationId": "manifest_v1_trips__run_id__manifest_get",
+    "parameters": [
+     {
+      "name": "run_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Run Id"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/attendance": {
+   "get": {
+    "tags": [
+     "students"
+    ],
+    "summary": "Attendance",
+    "operationId": "attendance_v1_attendance_get",
+    "parameters": [
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/alerts": {
+   "get": {
+    "tags": [
+     "security"
+    ],
+    "summary": "Alerts",
+    "operationId": "alerts_v1_alerts_get",
+    "parameters": [
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(OPEN|ACKNOWLEDGED|RESOLVED)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/inspections": {
+   "get": {
+    "tags": [
+     "security"
+    ],
+    "summary": "Inspections",
+    "operationId": "inspections_v1_inspections_get",
+    "parameters": [
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Date"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/fleet/job-orders": {
+   "get": {
+    "tags": [
+     "fleet"
+    ],
+    "summary": "Job Orders",
+    "operationId": "job_orders_v1_fleet_job_orders_get",
+    "parameters": [
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/fleet/documents": {
+   "get": {
+    "tags": [
+     "fleet"
+    ],
+    "summary": "Documents",
+    "operationId": "documents_v1_fleet_documents_get",
+    "parameters": [
+     {
+      "name": "state",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(EXPIRED|EXPIRING|VALID)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "State"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/scans/bus": {
+   "post": {
+    "tags": [
+     "scans"
+    ],
+    "summary": "Bus Scan",
+    "operationId": "bus_scan_v1_scans_bus_post",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BusScan"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/scans/gate": {
+   "post": {
+    "tags": [
+     "scans"
+    ],
+    "summary": "Gate Scan",
+    "operationId": "gate_scan_v1_scans_gate_post",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/GateScan"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/rfid": {
+   "post": {
+    "tags": [
+     "scans"
+    ],
+    "summary": "Rfid",
+    "operationId": "rfid_v1_rfid_post",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/RfidRead"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/gps/positions": {
+   "post": {
+    "tags": [
+     "vehicle tracker"
+    ],
+    "summary": "Positions",
+    "operationId": "positions_v1_gps_positions_post",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "array",
+        "items": {
+         "$ref": "#/components/schemas/Position"
+        },
+        "title": "Points"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/telematics/events": {
+   "post": {
+    "tags": [
+     "vehicle tracker"
+    ],
+    "summary": "Tele Events",
+    "operationId": "tele_events_v1_telematics_events_post",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "array",
+        "items": {
+         "$ref": "#/components/schemas/TeleEvent"
+        },
+        "title": "Events"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/eta": {
+   "get": {
+    "tags": [
+     "vehicle tracker"
+    ],
+    "summary": "Eta",
+    "operationId": "eta_v1_eta_get",
+    "parameters": [
+     {
+      "name": "bus",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Bus"
+      }
+     },
+     {
+      "name": "stop_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Stop Id"
+      }
+     },
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/fuel/transactions": {
+   "post": {
+    "tags": [
+     "fleet"
+    ],
+    "summary": "Fuel",
+    "operationId": "fuel_v1_fuel_transactions_post",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "type": "array",
+        "items": {
+         "$ref": "#/components/schemas/FuelTxn"
+        },
+        "title": "Txns"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/csms/sync": {
+   "post": {
+    "tags": [
+     "CSMS ERP"
+    ],
+    "summary": "Csms Sync",
+    "operationId": "csms_sync_v1_csms_sync_post",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "API key from Setup \u2192 Integrations",
+       "title": "X-Api-Key"
+      },
+      "description": "API key from Setup \u2192 Integrations"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CsmsBatch"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "BusScan": {
+    "properties": {
+     "bus": {
+      "type": "string",
+      "title": "Bus",
+      "description": "Bus number or plate",
+      "examples": [
+       "BUS-001"
+      ]
+     },
+     "code": {
+      "type": "string",
+      "title": "Code",
+      "description": "Card / tag number read from the student's ID card"
+     },
+     "direction": {
+      "type": "string",
+      "pattern": "^(CHECK_IN|CHECK_OUT)$",
+      "title": "Direction",
+      "default": "CHECK_IN"
+     },
+     "lat": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lat"
+     },
+     "lon": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lon"
+     },
+     "ts": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ts",
+      "description": "Capture time; defaults to now"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bus",
+     "code"
+    ],
+    "title": "BusScan"
+   },
+   "CsmsBatch": {
+    "properties": {
+     "students": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Students",
+      "default": []
+     },
+     "staff": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Staff",
+      "default": []
+     },
+     "buses": {
+      "items": {
+       "additionalProperties": true,
+       "type": "object"
+      },
+      "type": "array",
+      "title": "Buses",
+      "default": []
+     },
+     "dry_run": {
+      "type": "boolean",
+      "title": "Dry Run",
+      "default": true
+     },
+     "deactivate_missing": {
+      "type": "boolean",
+      "title": "Deactivate Missing",
+      "default": false
+     }
+    },
+    "type": "object",
+    "title": "CsmsBatch"
+   },
+   "FuelTxn": {
+    "properties": {
+     "transaction_id": {
+      "type": "string",
+      "title": "Transaction Id"
+     },
+     "ts": {
+      "type": "string",
+      "title": "Ts"
+     },
+     "plate": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Plate"
+     },
+     "card": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Card"
+     },
+     "litres": {
+      "type": "number",
+      "title": "Litres"
+     },
+     "amount": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Amount"
+     },
+     "station": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Station"
+     },
+     "odometer": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odometer"
+     }
+    },
+    "type": "object",
+    "required": [
+     "transaction_id",
+     "ts",
+     "litres"
+    ],
+    "title": "FuelTxn"
+   },
+   "GateScan": {
+    "properties": {
+     "gate_id": {
+      "type": "integer",
+      "maximum": 6.0,
+      "minimum": 1.0,
+      "title": "Gate Id"
+     },
+     "code": {
+      "type": "string",
+      "title": "Code"
+     },
+     "direction": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^(IN|OUT)$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Direction",
+      "description": "Leave empty for automatic IN/OUT"
+     },
+     "operator": {
+      "type": "string",
+      "title": "Operator",
+      "default": "API"
+     }
+    },
+    "type": "object",
+    "required": [
+     "gate_id",
+     "code"
+    ],
+    "title": "GateScan"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "Position": {
+    "properties": {
+     "bus": {
+      "type": "string",
+      "title": "Bus",
+      "description": "Bus number, plate or tracker vehicle id"
+     },
+     "ts": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ts"
+     },
+     "lat": {
+      "type": "number",
+      "title": "Lat"
+     },
+     "lon": {
+      "type": "number",
+      "title": "Lon"
+     },
+     "speed_kmh": {
+      "type": "number",
+      "title": "Speed Kmh",
+      "default": 0
+     },
+     "heading": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Heading"
+     },
+     "odometer": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Odometer"
+     },
+     "ignition": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ignition"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bus",
+     "lat",
+     "lon"
+    ],
+    "title": "Position"
+   },
+   "RfidRead": {
+    "properties": {
+     "reader_id": {
+      "type": "string",
+      "title": "Reader Id"
+     },
+     "uid": {
+      "type": "string",
+      "title": "Uid"
+     },
+     "ts": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ts"
+     }
+    },
+    "type": "object",
+    "required": [
+     "reader_id",
+     "uid"
+    ],
+    "title": "RfidRead"
+   },
+   "TeleEvent": {
+    "properties": {
+     "bus": {
+      "type": "string",
+      "title": "Bus"
+     },
+     "ts": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Ts"
+     },
+     "kind": {
+      "type": "string",
+      "title": "Kind",
+      "description": "HARSH_BRAKE, HARSH_ACCEL, HARSH_TURN, IDLE or SPEEDING"
+     },
+     "value": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Value"
+     },
+     "limit": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Limit"
+     },
+     "lat": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lat"
+     },
+     "lon": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lon"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bus",
+     "kind"
+    ],
+    "title": "TeleEvent"
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   }
+  }
+ }
+}
