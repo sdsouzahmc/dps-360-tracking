@@ -366,18 +366,30 @@ if run["date"] != today:
         + t("it was never closed. Account for every child and close it, or call the transport office."))
 st.caption(f"📅 {_rd:%a %d %b %Y} · Started {run['start_ts'][11:16]} by {run['started_by']} · crew: {db.staff_name(run['driver_id'])} / {db.staff_name(run['supervisor_id'])} / "
            f"{db.staff_name(run['caretaker_id'])}" + (" · 📴 OFFLINE" if offline else ""))
-_cn = [(t("On board"), cnt.get("ONBOARD", 0) + cnt.get("TRANSFER_PENDING", 0), "#2E9E5B"), (t("Expected"), cnt.get("EXPECTED", 0), "#E07A1F"),
-       (t("Completed"), cnt.get("COMPLETED", 0) + cnt.get("RETURNED", 0), "#3D4FD6"),
-       (t("Absent"), cnt.get("ABSENT_DECLARED", 0) + cnt.get("NO_SHOW", 0), "#6B7390")]
-st.markdown("<div class='crewcnt'>" + "".join(f"<div><b style='color:{c}'>{v}</b><span>{l}</span></div>" for l, v, c in _cn) + "</div>",
-            unsafe_allow_html=True)
+# every child on the list is in exactly one box, so the boxes always add up to the total
+_onb = cnt.get("ONBOARD", 0) + cnt.get("TRANSFER_PENDING", 0)
+_absn = cnt.get("ABSENT_DECLARED", 0) + cnt.get("NO_SHOW", 0)
+_done = cnt.get("COMPLETED", 0) + cnt.get("RETURNED", 0)
+_expn = cnt.get("EXPECTED", 0)
+_other = len(lines) - _onb - _absn - _done - _expn          # transferred out / cancelled
+_total = len(lines) - _other
+_cn = [(t("On list"), _total, "#1B2559"), (t("On board"), _onb, "#2E9E5B"), (t("Expected"), _expn, "#E07A1F"),
+       (t("Done"), _done, "#3D4FD6"), (t("Absent"), _absn, "#6B7390")]
+st.markdown("<div class='crewcnt' style='grid-template-columns:repeat(5,minmax(0,1fr))'>"
+            + "".join(f"<div><b style='color:{c}'>{v}</b><span>{l}</span></div>" for l, v, c in _cn) + "</div>", unsafe_allow_html=True)
+st.caption(f"{_total} {t('on the list')} = {_onb} {t('on board')} + {_expn} {t('expected')} + {_done} {t('completed')} + {_absn} {t('absent')}"
+           + (f" · {_other} {t('moved to another bus')}" if _other else ""))
+if _absn:
+    _abs_names = [ln.get("name") or db.q1("SELECT name FROM students WHERE id=?", (ln["student_id"],))["name"]
+                  for ln in lines if ln["status"] in ("ABSENT_DECLARED", "NO_SHOW")]
+    st.caption(f"🚫 {t('Absent')} ({_absn}, {t('not counted as on board')}): " + ", ".join(_abs_names))
 
 # all assigned students boarded -> banner + one voice announcement per trip (crew and driver screens)
-_onb = cnt.get("ONBOARD", 0) + cnt.get("TRANSFER_PENDING", 0)
 _exp_drop = sum(1 for ln in lines if ln["purpose"] == "DROPOFF" and ln["status"] == "EXPECTED")
 _has_drop = any(ln["purpose"] == "DROPOFF" for ln in lines)
 if cnt.get("EXPECTED", 0) == 0 and _onb:
-    msg("ok", f"<b>✅ {t('All students have boarded')}</b> — {_onb} {t('on board, no one left to pick up.')}")
+    msg("ok", f"<b>✅ {t('All students have boarded')}</b> — {_onb} {t('on board')}"
+        + (f" · {_absn} {t('absent')} ({_total} {t('on the list')})" if _absn else "") + f", {t('no one left to pick up.')}")
     if not st.session_state.get(f"{K}_allb_{run['id']}"):
         st.session_state[f"{K}_allb_{run['id']}"] = True
         st.session_state[f"{K}_schb_{run['id']}"] = True

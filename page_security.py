@@ -239,10 +239,21 @@ with tabs[5]:
         st.dataframe(df, hide_index=True, width="stretch", height=360)
     st.caption("Patrol rounds come from the guard-tour app (JWM patrol). Upload its Excel / CSV export to show the results here.")
     up = st.file_uploader("Patrol export (Excel or CSV)", type=["xlsx", "xls", "csv"], key="pat_up")
+    if st.session_state.get("pat_msg"):
+        k_, m_ = st.session_state.pop("pat_msg")
+        msg(k_, m_)
     if up is not None and st.button("Import patrol records", key="pat_imp"):
-        df = pd.read_csv(up) if up.name.lower().endswith(".csv") else pd.read_excel(up)
-        n, m = campus.import_patrol(df)
-        msg("ok" if n else "error", m)
+        try:
+            df = pd.read_csv(up, dtype=str, encoding="utf-8-sig", skipinitialspace=True) if up.name.lower().endswith(".csv") else pd.read_excel(up)
+            n, m = campus.import_patrol(df)
+            st.session_state.pat_msg = ("ok" if n else "warn" if "already" in m else "error", m)
+        except Exception as e:
+            st.session_state.pat_msg = ("error", f"Could not read the file: {e}")
+        st.rerun()
+    try:
+        st.page_link("page_patrol.py", label="Open the Security patrols dashboard", icon="🛡️")
+    except Exception:
+        pass
     tmpl = pd.DataFrame([{"Plan": "Night patrol", "Checkpoint": "Gate 1", "Patrolman": "Ram Bahadur Thapa", "Planned time": f"{D} 22:00:00",
                           "Arrival time": f"{D} 22:03:12", "Status": "Normal", "Site": "DPS Main campus"}])
     st.download_button("Template (CSV)", tmpl.to_csv(index=False).encode(), "patrol_import_template.csv", "text/csv")

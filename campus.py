@@ -782,8 +782,34 @@ PATROL_COLUMNS = {   # accepted column names in a patrol-system export (lower-ca
 }
 
 
+def _parse_ts(v):
+    """Parse a patrol export time: 10/20/2026 18:00, 20/10/2026 18:00, 2026-10-20 18:00:00, Excel serials."""
+    if v is None:
+        return None
+    if isinstance(v, (int, float)) and v == v and 20000 < float(v) < 80000:      # Excel serial date
+        return datetime(1899, 12, 30) + timedelta(days=float(v))
+    t = str(v).strip()
+    if not t or t.lower() in ("nan", "nat", "none", "-"):
+        return None
+    for f in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M",
+              "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%m/%d/%Y %I:%M %p", "%m/%d/%Y %I:%M:%S %p",
+              "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%m-%d-%Y %H:%M",
+              "%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S", "%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(t, f)
+        except ValueError:
+            pass
+    try:
+        import pandas as pd
+        d = pd.to_datetime(t, errors="coerce")
+        return None if pd.isna(d) else d.to_pydatetime().replace(tzinfo=None)
+    except Exception:
+        return None
+
+
 def import_patrol(df, source="JWM patrol export", con=None):
-    cols = {c.lower().strip(): c for c in df.columns}
+    """Import a patrol export (JWM / guard-tour CSV or Excel). Rows before 06:00 belong to the previous night's patrol."""
+    cols = {str(c).lower().strip(): c for c in df.columns}
     m = {}
     for k, names in PATROL_COLUMNS.items():
         for n in names:
@@ -791,26 +817,52 @@ def import_patrol(df, source="JWM patrol export", con=None):
                 m[k] = cols[n]
                 break
     if "checkpoint" not in m or ("actual_ts" not in m and "planned_ts" not in m):
-        return 0, f"Need at least a checkpoint column and a time column. Found: {', '.join(df.columns)}"
-    rows = []
-    for _, r in df.iterrows():
+        return 0, f"Need at least a checkpoint column and a time column. Found: {', '.join(map(str, df.columns))}"
+    rows, skipped, dup = [], [], 0
+    for i, r in df.iterrows():
         def g(k):
             v = r[m[k]] if k in m else None
-            return None if v is None or (isinstance(v, float) and v != v) else str(v)
-        t_ = g("actual_ts") or g("planned_ts")
-        try:
-            d = datetime.fromisoformat(str(t_).replace("/", "-")[:19])
-        except ValueError:
+            if v is None or (isinstance(v, float) and v != v):
+                return None
+            v = str(v).strip()
+            return v or None
+        def raw(k):
+            return r[m[k]] if k in m else None
+        if not g("checkpoint"):
             continue
-        stt = (g("status") or ("ARRIVED" if g("actual_ts") else "OMITTED")).upper()
-        stt = "ARRIVED" if stt in ("NORMAL", "ARRIVED", "OK", "QUALIFIED", "DONE", "ON TIME") else "OMITTED" if stt in ("OMITTED", "MISSED", "MISS") \
-            else "LATE" if "LATE" in stt else stt
-        rows.append((d.strftime("%Y-%m-%d"), g("plan") or "Imported", None, g("checkpoint"), g("guard"), g("planned_ts"),
-                     g("actual_ts") if stt != "OMITTED" else None, stt, g("note"), source, g("site")))
+        pt, at = _parse_ts(raw("planned_ts")), _parse_ts(raw("actual_ts"))
+        if pt is None and at is None:
+            skipped.append(int(i) + 2)
+            continue
+        stt = (g("status") or ("ARRIVED" if at else "OMITTED")).upper()
+        stt = "ARRIVED" if stt in ("NORMAL", "ARRIVED", "OK", "QUALIFIED", "DONE", "ON TIME", "COMPLETED", "VERIFIED") \
+            else "OMITTED" if stt in ("OMITTED", "MISSED", "MISS", "NOT ARRIVED", "ABSENT") else "LATE" if "LATE" in stt or "DELAY" in stt else stt
+        if stt == "ARRIVED" and pt and at and (at - pt).total_seconds() > 30 * 60:
+            stt = "LATE"
+        base = pt or at
+        night = "night" in (g("plan") or "").lower()
+        pdate = (base - timedelta(days=1)) if base.hour < 6 or (night and base.hour < 7) else base   # night shift ends ~06:00: counts for the evening it started
+        fmt = "%Y-%m-%d %H:%M:%S"
+        rows.append((pdate.strftime("%Y-%m-%d"), g("plan") or "Imported", None, g("checkpoint"), g("guard"),
+                     pt.strftime(fmt) if pt else None, at.strftime(fmt) if at and stt != "OMITTED" else None, stt, g("note"), source, g("site")))
     with db.tx(con) as c:
+        new = []
+        for x in rows:   # re-uploading the same file does not double the records
+            if c.execute("SELECT 1 FROM patrol_rounds WHERE date=? AND checkpoint=? AND COALESCE(planned_ts,'')=COALESCE(?,'') AND COALESCE(actual_ts,'')=COALESCE(?,'') AND COALESCE(guard,'')=COALESCE(?,'')",
+                         (x[0], x[3], x[5], x[6], x[4])).fetchone():
+                dup += 1
+            else:
+                new.append(x)
         c.executemany("""INSERT INTO patrol_rounds(date, plan, round_no, checkpoint, guard, planned_ts, actual_ts, status, note, source, site)
-                         VALUES (?,?,?,?,?,?,?,?,?,?,?)""", rows)
-    return len(rows), f"Imported {len(rows)} patrol records."
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?)""", new)
+    days = sorted({x[0] for x in rows})
+    msg = (f"Imported {len(new)} patrol records" + (f" for {', '.join(days)}" if days else "") + ".") if new else \
+        (f"No new records — all {dup} rows were already imported." if dup else "Imported 0 patrol records.")
+    if dup and new:
+        msg += f" {dup} already imported (skipped)."
+    if skipped:
+        msg += f" {len(skipped)} row(s) had no readable time (rows {', '.join(map(str, skipped[:10]))})."
+    return len(new), msg
 
 
 def patrol(date, con=None):

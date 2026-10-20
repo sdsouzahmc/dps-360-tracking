@@ -222,6 +222,7 @@ P = {
     "d360": st.Page("page_360.py", title="360 Command centre", icon=":material/radar:", default=True),
     "person": st.Page("page_person.py", title="Student 360", icon=":material/person_search:"),
     "security": st.Page("page_security.py", title=t("Security app"), icon=":material/shield_person:"),
+    "patrol": st.Page("page_patrol.py", title="Security patrols", icon=":material/local_police:"),
     "teacher": st.Page("page_teacher.py", title=t("Teacher app"), icon=":material/fact_check:"),
     "campus": st.Page("page_campus.py", title="Campus & visitors", icon=":material/badge:"),
     "safety": st.Page("page_safety.py", title="Vehicle & patrol checks", icon=":material/verified_user:"),
@@ -239,14 +240,14 @@ P = {
     "plan": st.Page("page_planning.py", title="Trip planning", icon=":material/route:"),
     "locs": st.Page("page_locations.py", title="Student locations", icon=":material/home_pin:"),
 }
-OFFICE = ["d360", "person", "campus", "safety", "dash", "live", "assign", "lists", "plan", "locs", "exceptions", "notices", "reports"]
+OFFICE = ["d360", "person", "patrol", "campus", "safety", "dash", "live", "assign", "lists", "plan", "locs", "exceptions", "notices", "reports"]
 MENU = {
     "supervisor": ["crew"], "caretaker": ["crew"], "driver": ["crew"],
     "receiving": ["receipt"],
     "guardian": ["parent"],
-    "security": ["security"],
+    "security": ["security", "patrol"],
     "teacher": ["teacher"],
-    "principal": ["d360", "person", "campus", "safety", "dash", "live", "exceptions", "reports"],
+    "principal": ["d360", "person", "patrol", "campus", "safety", "dash", "live", "exceptions", "reports"],
     "dispatcher": OFFICE + ["crew", "receipt"],
     "manager": OFFICE + ["security", "teacher", "setup", "crew", "receipt"],
     "admin": OFFICE + ["security", "teacher", "setup", "crew", "receipt", "parent"],
@@ -254,7 +255,7 @@ MENU = {
 _pages = [P[k] for k in MENU.get(role, [])]
 if role in ("manager", "admin", "dispatcher", "principal"):
     _groups = {"Command centre": [P[k] for k in ("d360", "person") if P[k] in _pages],
-               "Campus": [P[k] for k in ("security", "teacher", "campus", "safety") if P[k] in _pages],
+               "Campus": [P[k] for k in ("security", "patrol", "teacher", "campus", "safety") if P[k] in _pages],
                "Transport": [P[k] for k in ("dash", "live", "assign", "lists", "plan", "locs", "crew", "receipt") if P[k] in _pages],
                "Office": [P[k] for k in ("exceptions", "notices", "reports", "setup", "parent") if P[k] in _pages]}
     st.navigation({k: v for k, v in _groups.items() if v}).run()
