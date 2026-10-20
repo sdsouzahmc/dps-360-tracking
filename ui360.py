@@ -106,6 +106,16 @@ def donut(value, total, color="#2E9E5B", label="", size=130):
 def vehicle_check_form(bus_id, kind, trip_no, user, key):
     """In-app pre-trip / post-trip checklist (DPS driver checklist). A critical defect blocks the trip start."""
     items = campus.PRE_CHECKS if kind == "PRE" else campus.POST_CHECKS
+    import fleet
+    import security_ext as SX
+    bus = db.bus(bus_id)
+    tagk = f"vc_{key}_{kind}_tagv"
+    with st.expander("📷 Scan the rear-door tag with the camera", expanded=False):
+        from qr_scanner import qr_scanner
+        tv = qr_scanner(key=f"vc_{key}_{kind}_cam")
+        if tv and tv.get("code"):
+            st.session_state[tagk] = tv["code"]
+            st.success(f"Tag read: {tv['code']}")
     with st.form(f"vc_{key}_{kind}"):
         st.markdown(f"**{'🔧 Pre-trip vehicle check' if kind == 'PRE' else '🧹 Post-trip check'}** — tap *Defect* for anything not OK. "
                     + ("Items marked ⛔ block the trip start." if kind == "PRE" else ""))
@@ -118,11 +128,18 @@ def vehicle_check_form(bus_id, kind, trip_no, user, key):
             ans[item] = st.radio(("⛔ " if crit and kind == "PRE" else "") + item, ["OK", "Defect", "N/A"], horizontal=True,
                                  key=f"vc_{key}_{kind}_{item}")
         c1, c2 = st.columns(2)
-        odo = c1.number_input("Odometer (km)", min_value=0, value=0, step=1, key=f"vc_{key}_{kind}_odo")
+        odo = c1.number_input("Odometer (km)", min_value=0, value=int(fleet.odometer(bus_id)), step=1, key=f"vc_{key}_{kind}_odo")
         fuel = c2.selectbox("Fuel", ["Full", "3/4", "1/2", "1/4", "Reserve"], key=f"vc_{key}_{kind}_fuel")
+        tag = st.text_input("Rear-door tag *", value=st.session_state.get(tagk, ""), key=f"vc_{key}_{kind}_tag",
+                            placeholder=f"Walk to the rear door and scan its tag (demo: {SX.rear_tag_code(bus['bus_no'])})",
+                            help="Proves the check was done from the back of the bus (DPS requirement).")
         ok = st.form_submit_button("Submit check", type="primary", width="stretch")
     if ok:
+        if not SX.rear_tag_ok(bus_id, tag):
+            st.error(f"Rear-door tag not recognised — walk to the rear door of {bus['bus_no']} and scan the tag there.")
+            return None
         answers = {k: ("DEFECT" if v == "Defect" else "N/A" if v == "N/A" else "OK") for k, v in ans.items()}
+        answers["Rear-door tag scanned"] = "OK"
         cid, status = campus.save_check(bus_id, db.today(), trip_no, kind, answers, user["username"], user["display_name"], odo or None, fuel)
         return status
     return None

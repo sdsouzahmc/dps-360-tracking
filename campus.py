@@ -115,12 +115,31 @@ ALERT_TEXT = {
     "VEHICLE_DEFECT": "Vehicle defect",
     "PATROL_MISSED": "Patrol checkpoint missed",
     "PRESENT_NO_SCAN": "Present in class, no entry scan",
+    "INSPECTION_MISSED": "Bus not inspected after trip",
+    "CHILD_LEFT_ON_BUS": "Child found on bus after trip",
+    "VISITOR_BLACKLISTED": "Blacklisted visitor at the gate",
+    "UNAUTHORIZED_PICKUP": "Collector not on the allowed list",
+    "DOC_EXPIRING": "Document expiring",
+    "SPEEDING": "Bus over the speed limit",
+    "HARSH_DRIVING": "Harsh braking / acceleration",
 }
 
 
 def ensure_schema(con=None):
     with db.tx(con) as c:
         c.executescript(SCHEMA)
+        import security_ext
+        security_ext.ensure_schema(c)
+        try:
+            import fleet
+            fleet.ensure_schema(c)
+        except ImportError:
+            pass
+        try:
+            import integrations
+            integrations.ensure_schema(c)
+        except ImportError:
+            pass
         if not c.execute("SELECT COUNT(*) FROM gates").fetchone()[0]:
             lat, lon = db.SCHOOL_LAT, db.SCHOOL_LON
             for i, (n, k) in enumerate(GATES):
@@ -399,6 +418,10 @@ def lookup(code, date=None, con=None):
     if v:
         return {"type": "VISITOR", "id": v["id"], "name": v["name"], "row": v, "card_status": "ACTIVE" if v["status"] != "LEFT" else "USED",
                 "code": code}
+    gp = q1("SELECT * FROM gate_passes WHERE UPPER(pass_code)=? AND active=1", (code,), con)
+    if gp:
+        r = student_card(gp["student_id"], con)
+        return {"type": "STUDENT", "id": r["id"], "name": r["name"], "row": r, "card_status": "ACTIVE", "code": code, "gate_pass": gp}
     ep = q1("SELECT * FROM early_pickups WHERE UPPER(pass_code)=? AND date=?", (code, date), con)
     if ep:
         r = student_card(ep["student_id"], con)
@@ -411,7 +434,7 @@ def _person_state(ptype, pid, date, con=None):
     return r
 
 
-def gate_scan(code, gate_id, operator, direction=None, method="CARD", when=None, con=None, notify_parent=True):
+def gate_scan(code, gate_id, operator, direction=None, method="CARD", when=None, con=None, notify_parent=True, override=False):
     """Security app: one card / pass scan at a gate. Returns a result for the big screen (ok/warn/error, message, person, direction)."""
     when = when or db.now()
     date = when.strftime("%Y-%m-%d")
@@ -479,14 +502,48 @@ def gate_scan(code, gate_id, operator, direction=None, method="CARD", when=None,
                        + (" · bus student, came privately" if s["transport"] == "BUS" else ""))
             return res
         # OUT
+        import security_ext as SX
         if ep and ep["status"] == "APPROVED":
+            okc = SX.collector_allowed(s["id"], ep["collector"], ep["collector_id"], c)
+            if not okc and not override:
+                log("STUDENT", s["id"], "OUT", "REJECTED", f"Collector {ep['collector']} not on the allowed list", ref=ep["pass_code"], meth="EARLY_PICKUP")
+                if not q1("SELECT id FROM campus_alerts WHERE kind='UNAUTHORIZED_PICKUP' AND student_id=? AND date=? AND status<>'RESOLVED'",
+                          (s["id"], date), c):
+                    raise_alert("UNAUTHORIZED_PICKUP", "HIGH", f"{s['name']} ({s['class_name']}-{s['section']}): collector {ep['collector']} "
+                                f"({ep['relation']}) is not a parent or on the allowed list — held at the gate, pass {ep['pass_code']}", date, s["id"],
+                                when=when, con=c)
+                return {"ok": False, "level": "error", "person": hit, "dir": "OUT", "early": ep, "collector_ok": False,
+                        "message": f"HOLD — {ep['collector']} ({ep['relation']}) is NOT a parent or on {s['name']}'s allowed list. Do not release until "
+                                   f"the office confirms. Security alerted. (Pass {ep['pass_code']})"}
             c.execute("UPDATE early_pickups SET status='COMPLETED', out_ts=?, out_gate=? WHERE id=?", (ts(when), gate_id, ep["id"]))
-            log("STUDENT", s["id"], "OUT", "OK", f"Early pickup by {ep['collector']}", ref=ep["pass_code"], meth="EARLY_PICKUP")
+            log("STUDENT", s["id"], "OUT", "OK", f"Early pickup by {ep['collector']}" + (" (office confirmed collector)" if not okc else ""),
+                ref=ep["pass_code"], meth="EARLY_PICKUP")
+            if not okc:
+                c.execute("""UPDATE campus_alerts SET status='RESOLVED', resolved_by=?, resolved_ts=?, resolution='Office confirmed the collector'
+                             WHERE kind='UNAUTHORIZED_PICKUP' AND student_id=? AND date=? AND status<>'RESOLVED'""", (operator, ts(when), s["id"], date))
             if notify_parent:
                 _notify(c, s["id"], "EARLY_PICKUP", f"{s['name']} left school at {nowhm} with {ep['collector']} ({ep['relation']}) — early pickup pass "
                         f"{ep['pass_code']}.", when)
             res.update(message=f"EARLY PICKUP: release {s['name']} to {ep['collector']} ({ep['relation']}, ID {ep['collector_id'] or '—'}). "
-                               "Check the collector's ID against the pass.", early=ep)
+                               "Check the collector's ID and photo against the pass.", early=ep, collector_ok=bool(okc))
+            return res
+        gp = hit.get("gate_pass") or SX.pass_today(s["id"], date, c)
+        if gp and nowhm >= d0:
+            log("STUDENT", s["id"], "OUT", "OK", f"Standing gate pass — collected by {gp['collector']}", ref=gp["pass_code"], meth="GATE_PASS")
+            if s["transport"] == "BUS":
+                import engine as E
+                t_ = drop_trip(s["batch"], s["grp"])
+                run = q1("SELECT status FROM trip_runs WHERE date=? AND trip_no=? AND bus_id=(SELECT bus_id FROM trip_assign WHERE student_id=? AND trip_no=?)",
+                         (date, t_, s["id"], t_), c)
+                if t_ and (not run or run["status"] in ("PLANNED",)) and \
+                        not q1("SELECT id FROM absences WHERE student_id=? AND date=? AND (trip_no IS NULL OR trip_no=?) AND status='APPROVED'",
+                               (s["id"], date, t_), c):
+                    E.declare_absence(s["id"], date, t_, f"Collected at the gate (standing pass {gp['pass_code']})", operator, "GATE_PASS", c)
+            if notify_parent:
+                _notify(c, s["id"], "GATE_PASS", f"{s['name']} left school at {nowhm} with {gp['collector']} ({gp['relation']}) — gate pass "
+                        f"{gp['pass_code']}.", when)
+            res.update(message=f"GATE PASS {gp['pass_code']}: release {s['name']} to {gp['collector']} ({gp['relation']}) — check the photo and ID.",
+                       gate_pass=gp)
             return res
         if d0 > nowhm >= arrive_by:           # during school hours: not allowed without a pass
             log("STUDENT", s["id"], "OUT", "REJECTED", "No early-pickup pass during school hours")
@@ -527,9 +584,19 @@ def next_pass(date, con=None):
     return f"V{date[2:4]}{date[5:7]}{date[8:10]}-{n:03d}"
 
 
+class BlacklistedVisitor(Exception):
+    pass
+
+
 def register_visitor(name, phone, id_no, company, purpose, host, vehicle, gate_id, user, expected_min=60, check_in=True, when=None,
-                     gender="M", con=None):
+                     gender="M", con=None, allow_blacklisted=False):
     when = when or db.now()
+    if not allow_blacklisted:
+        import security_ext as SX
+        b, why = SX.check_blacklist(name, id_no, phone, con)
+        if b:
+            SX.flag_blacklisted(name, id_no, phone, gate_id, user, con)
+            raise BlacklistedVisitor(f"{name} matches the visitor blacklist ({why}): {b['reason']}. Entry refused — security alerted.")
     date = when.strftime("%Y-%m-%d")
     with db.tx(con) as c:
         pno = next_pass(date, c)

@@ -18,6 +18,7 @@ def _boot():
     """First run: build the DPS-scale demo (≈4,800 students, 100 buses, last school days + today so far)."""
     with st.spinner("Preparing the DPS 360 demo campus (first start only, about 20 seconds)…"):
         db.init_db()
+        db.seed_extras()
         import planner
         planner.ensure_schema()
         import resets
@@ -29,6 +30,8 @@ _boot()
 import dps_data   # noqa: E402
 dps_data.tick()   # the simulated school day moves on to the current time
 dps_data.apply_maintenance()   # one-off test-support actions (maintenance.json)
+import security_ext   # noqa: E402
+security_ext.check_missed_inspections()   # a closed trip with no security inspection after 20 min raises an alert
 
 st.markdown("""<style>
   :root { --navy:#1B2559; --indigo:#3D4FD6; --indigo-soft:#E9ECFC; --ink:#1A2036; --muted:#6B7390; --line:#E3E7F0;
@@ -193,7 +196,8 @@ def login():
 | Security / gate | `security`, `guard1` | 1234 |
 | Teacher (Grade 5-A) | `teacher1` | 1234 |
 | Parent | `g001` … `g040` | 1234 |
-| Bus supervisor / driver | `sup001` / `drv001` | 1234 |""")
+| Bus supervisor / driver | `sup001` / `drv001` | 1234 |
+| Fleet approvers: supervisor, senior manager, VP | `fleetsup`, `srmanager`, `vp` | 1234 |""")
 
 
 if "user" not in st.session_state:
@@ -206,7 +210,7 @@ role = user["role"]
 st.logo(os.path.join(BASE, "dps360_logo.svg"), size="large", icon_image=os.path.join(BASE, "dps360_icon.svg"))
 with st.sidebar:
     st.markdown("<div class='brand-sub'>DPS 360 · powered by AutoTrace · " + db.setting("school_name", db.SCHOOL_NAME) + "</div>", unsafe_allow_html=True)
-    st.markdown(f"**{user['display_name']}**  \n<span class='muted'>{role.title()} · {user['username']}</span>", unsafe_allow_html=True)
+    st.markdown(f"**{user['display_name']}**  \n<span class='muted'>{ {'vp': 'Vice President', 'fleet_supervisor': 'Fleet supervisor', 'senior_manager': 'Senior Manager'}.get(role, role.title())} · {user['username']}</span>", unsafe_allow_html=True)
     lang = st.radio(t("Language"), ["English", "العربية"], horizontal=True, index=1 if st.session_state.get("lang") == "ar" else 0)
     if (lang == "العربية") != (st.session_state.get("lang") == "ar"):
         st.session_state.lang = "ar" if lang == "العربية" else "en"
@@ -225,6 +229,7 @@ P = {
     "patrol": st.Page("page_patrol.py", title="Security patrols", icon=":material/local_police:"),
     "teacher": st.Page("page_teacher.py", title=t("Teacher app"), icon=":material/fact_check:"),
     "campus": st.Page("page_campus.py", title="Campus & visitors", icon=":material/badge:"),
+    "fleet": st.Page("page_fleet.py", title="Fleet maintenance & fuel", icon=":material/build:"),
     "safety": st.Page("page_safety.py", title="Vehicle & patrol checks", icon=":material/verified_user:"),
     "assign": st.Page("page_assign.py", title="Bus assignment board", icon=":material/swap_horiz:"),
     "dash": st.Page("page_dashboard.py", title="Transport overview", icon=":material/directions_bus:"),
@@ -247,16 +252,20 @@ MENU = {
     "guardian": ["parent"],
     "security": ["security", "patrol"],
     "teacher": ["teacher"],
-    "principal": ["d360", "person", "patrol", "campus", "safety", "dash", "live", "exceptions", "reports"],
-    "dispatcher": OFFICE + ["crew", "receipt"],
-    "manager": OFFICE + ["security", "teacher", "setup", "crew", "receipt"],
-    "admin": OFFICE + ["security", "teacher", "setup", "crew", "receipt", "parent"],
+    "principal": ["d360", "person", "patrol", "campus", "safety", "fleet", "dash", "live", "exceptions", "reports"],
+    "fleet_supervisor": ["fleet"],
+    "senior_manager": ["d360", "fleet", "patrol", "reports"],
+    "vp": ["d360", "fleet", "patrol", "campus", "reports"],
+    "dispatcher": OFFICE + ["fleet", "crew", "receipt"],
+    "manager": OFFICE + ["fleet", "security", "teacher", "setup", "crew", "receipt"],
+    "admin": OFFICE + ["fleet", "security", "teacher", "setup", "crew", "receipt", "parent"],
 }
 _pages = [P[k] for k in MENU.get(role, [])]
-if role in ("manager", "admin", "dispatcher", "principal"):
+if role in ("manager", "admin", "dispatcher", "principal", "senior_manager", "vp"):
     _groups = {"Command centre": [P[k] for k in ("d360", "person") if P[k] in _pages],
                "Campus": [P[k] for k in ("security", "patrol", "teacher", "campus", "safety") if P[k] in _pages],
                "Transport": [P[k] for k in ("dash", "live", "assign", "lists", "plan", "locs", "crew", "receipt") if P[k] in _pages],
+               "Fleet": [P[k] for k in ("fleet",) if P[k] in _pages],
                "Office": [P[k] for k in ("exceptions", "notices", "reports", "setup", "parent") if P[k] in _pages]}
     st.navigation({k: v for k, v in _groups.items() if v}).run()
 else:

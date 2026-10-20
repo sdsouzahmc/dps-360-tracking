@@ -28,7 +28,10 @@ gate = c1.pills("Gate", list(gmap), default=st.session_state.get("sec_gate_defau
 _open = campus.alerts(D, "OPEN", "security")
 c2.markdown(f"<div style='text-align:right'>{U.pill(f'{len(_open)} open alerts', 'red' if _open else 'green')}</div>", unsafe_allow_html=True)
 
-tabs = st.tabs(["📷 Scan", f"🪪 Visitors", "🕐 Early pickups", f"🚨 Alerts ({len(_open)})", "📋 Gate log", "🛡 Patrol"])
+import security_ext as SX
+_board = SX.inspections_board(D)
+_due = [b for b in _board if b["state"] in ("DUE", "MISSED")]
+tabs = st.tabs(["📷 Scan", f"🚌 Bus inspection ({len(_due)})", f"🪪 Visitors", "🕐 Early pickups", f"🚨 Alerts ({len(_open)})", "📋 Gate log", "🛡 Patrol"])
 
 
 def show_result(res):
@@ -53,10 +56,19 @@ def show_result(res):
                     unsafe_allow_html=True)
     else:
         st.markdown(f"<div class='big-result error'><div class='msg'>⛔ {res['message']}</div></div>", unsafe_allow_html=True)
+    hold = res.get("early") or res.get("gate_pass")
+    if p and hold and p["type"] in ("STUDENT", "EARLY_PASS"):
+        st.markdown(f"**Who may collect {p['row']['name']}** — compare the collector's face and QID:")
+        st.markdown(SX.collectors_html(p["row"]["id"], 58, hold["collector"]), unsafe_allow_html=True)
+        if res.get("collector_ok") is False and not res.get("ok") and role in ("admin", "manager", "security"):
+            st.caption("Release only after the office has confirmed this collector by phone with the parent.")
+            if st.button("☎️ Office confirmed with the parent — release", key="sec_override", type="primary"):
+                do_scan(res["early"]["pass_code"], "OUT", "EARLY_PICKUP", override=True)
+                st.rerun()
 
 
-def do_scan(code, direction, method):
-    res = campus.gate_scan(code, gate, user["display_name"], direction=direction, method=method)
+def do_scan(code, direction, method, override=False):
+    res = SX.timed("GATE", campus.gate_scan, code, gate, user["display_name"], direction=direction, method=method, override=override, device=f"gate{gate}")
     st.session_state["sec_last"] = res
     st.session_state["sec_say"] = ("Stop. " if not res["ok"] else "") + res["message"].split(" — ")[0][:80]
 
@@ -116,6 +128,50 @@ with tabs[0]:
                     st.rerun()
 
 with tabs[1]:
+    done_ = [b for b in _board if b["state"] in ("DONE", "LATE", "CHILD_FOUND")]
+    U.kpis([("TRIPS CLOSED TODAY", len(_board), "need a security check", "#1B2559", ""),
+            ("INSPECTED", len(done_), f"{sum(1 for b in _board if b['state'] == 'LATE')} late", "#2E9E5B", "green"),
+            ("DUE NOW", sum(1 for b in _board if b["state"] == "DUE"), f"within {SX.GRACE_MIN} min of closing", "#E07A1F", "orange"),
+            ("MISSED", sum(1 for b in _board if b["state"] == "MISSED"), "alert raised", "#D93025", "red")], n=4)
+    st.caption("After every trip, a guard walks the bus to the rear door, scans the tag there and confirms that no child is left on board. "
+               "The crew's own seat sweep is not enough — this is the independent check.")
+    if not _due:
+        st.success("No bus waiting for inspection.")
+    pick_ = st.selectbox("Bus to inspect", [b["run_id"] for b in _due], key="insp_run",
+                         format_func=lambda rid: next(f"{b['bus_no']} · Trip {b['trip_no']} · closed {b['end_ts'][11:16]} ({b['mins_since_close']} min ago)"
+                                                      + (" · MISSED" if b["state"] == "MISSED" else "") for b in _due if b["run_id"] == rid)) if _due else None
+    if pick_:
+        b_ = next(b for b in _due if b["run_id"] == pick_)
+        with st.container(border=True):
+            st.markdown(f"**{b_['bus_no']}** · Trip {b_['trip_no']} · crew sweep by {b_['sweep_by'] or '—'}")
+            st.markdown("1️⃣ Walk to the **rear door** and scan the tag")
+            tv = qr_scanner(key=f"insp_cam{pick_}")
+            if tv and tv.get("code"):
+                st.session_state[f"insp_tag{pick_}"] = tv["code"]
+            tag_ = st.text_input("Rear-door tag", value=st.session_state.get(f"insp_tag{pick_}", ""), key=f"insp_tagt{pick_}",
+                                 placeholder=f"Scan the QR inside the rear door (demo: {SX.rear_tag_code(b_['bus_no'])})")
+            if tag_:
+                st.markdown(U.pill("Tag OK — rear of the bus reached", "green") if SX.rear_tag_ok(b_["bus_id"], tag_) else U.pill("Wrong tag", "red"),
+                            unsafe_allow_html=True)
+            st.markdown("2️⃣ Check and tick")
+            ans_ = {k: st.checkbox(k, key=f"insp_{pick_}_{i}") for i, k in enumerate(SX.INSPECT_ITEMS)}
+            found_ = st.toggle("⚠ A child was found on the bus", key=f"insp_found{pick_}")
+            note_ = st.text_input("Child's name / where found", key=f"insp_note{pick_}") if found_ else ""
+            if st.button("✅ Confirm inspection" if not found_ else "🚨 Report child found", type="primary", key=f"insp_go{pick_}"):
+                ok_, m_ = SX.save_inspection(pick_, user["username"], user["display_name"], tag_, ans_, found_, note_)
+                st.session_state["insp_msg"] = ("ok" if ok_ and not found_ else "error", m_)
+                st.rerun()
+    if st.session_state.get("insp_msg"):
+        msg(*st.session_state.pop("insp_msg"))
+    with st.expander(f"Inspection log today ({len(done_)})"):
+        st.dataframe(pd.DataFrame([{"Bus": b["bus_no"], "Trip": b["trip_no"], "Closed": (b["end_ts"] or "")[11:16],
+                                    "Inspected": (b["inspection"]["ts"] if b["inspection"] else "")[11:16],
+                                    "Minutes after": b["inspection"]["minutes_after"] if b["inspection"] else None,
+                                    "Inspector": b["inspection"]["inspector_name"] if b["inspection"] else "",
+                                    "Result": {"DONE": "Bus empty", "LATE": "Bus empty (late)", "CHILD_FOUND": "CHILD FOUND"}.get(b["state"], b["state"])}
+                                   for b in done_]), hide_index=True, width="stretch")
+
+with tabs[2]:
     vis_today = campus.visitors(D)
     on = [v for v in vis_today if v["status"] == "ON_CAMPUS"]
     U.kpis([("ON CAMPUS NOW", len(on), "visitors with an open pass", "#0F9BB5", ""),
@@ -137,10 +193,14 @@ with tabs[1]:
             if not (vn.strip() and vp.strip() and host.strip()):
                 msg("error", "Name, mobile and host are required.")
             else:
-                vid, pno = campus.register_visitor(vn.strip(), vp.strip(), vq.strip(), vc.strip(), purpose, host.strip(), veh.strip(), gate,
-                                                   user["display_name"], exp)
-                st.session_state["vis_pass"] = vid
-                st.rerun()
+                try:
+                    vid, pno = campus.register_visitor(vn.strip(), vp.strip(), vq.strip(), vc.strip(), purpose, host.strip(), veh.strip(), gate,
+                                                       user["display_name"], exp)
+                    st.session_state["vis_pass"] = vid
+                    st.rerun()
+                except campus.BlacklistedVisitor as ex:
+                    msg("error", f"<b>⛔ ENTRY REFUSED</b> — {ex}")
+                    alert_sound("Stop. This visitor is on the blacklist.", key="vis_bl_snd")
     if st.session_state.get("vis_pass"):
         v = db.q1("SELECT * FROM visitors WHERE id=?", (st.session_state["vis_pass"],))
         pc1, pc2 = st.columns([1, 2])
@@ -164,12 +224,30 @@ with tabs[1]:
         if b.button("Check out", key=f"vout{v['id']}", width="stretch"):
             st.session_state["sec_last"] = campus.checkout_visitor(v["id"], gate, user["display_name"])
             st.rerun()
+    bl = SX.blacklist()
+    with st.expander(f"⛔ Visitor blacklist ({len(bl)})"):
+        st.caption("Checked automatically at registration (QID / passport number, phone, or exact name). A match refuses entry and alerts security.")
+        st.dataframe(pd.DataFrame([{"Name": b_["name"], "QID / passport": b_["id_no"], "Phone": b_["phone"], "Reason": b_["reason"],
+                                    "Added by": b_["added_by"], "Since": (b_["ts"] or "")[:10]} for b_ in bl]), hide_index=True, width="stretch")
+        if role in ("admin", "manager", "security"):
+            with st.form("bl_add", clear_on_submit=True):
+                a, b, c_ = st.columns(3)
+                bn, bq, bp = a.text_input("Name"), b.text_input("QID / passport"), c_.text_input("Phone")
+                br = st.text_input("Reason *")
+                if st.form_submit_button("Add to blacklist") and bn.strip() and br.strip():
+                    SX.add_blacklist(bn, bq, bp, br, user["display_name"])
+                    st.rerun()
+            rm = st.selectbox("Remove an entry", [None] + [b_["id"] for b_ in bl], format_func=lambda i: "—" if i is None else next(
+                f"{b_['name']} ({b_['id_no'] or b_['phone']})" for b_ in bl if b_["id"] == i), key="bl_rm")
+            if rm and st.button("Remove from blacklist", key="bl_rm_go"):
+                SX.remove_blacklist(rm, user["display_name"])
+                st.rerun()
     with st.expander(f"All visitors today ({len(vis_today)})"):
         st.dataframe(pd.DataFrame([{"Pass": v["pass_no"], "Name": v["name"], "Purpose": v["purpose"], "Host": v["host"], "Company": v["company"],
                                     "In": (v["in_ts"] or "")[11:16], "Out": (v["out_ts"] or "")[11:16], "Status": v["status"].replace("_", " ").title()}
                                    for v in vis_today]), hide_index=True, width="stretch")
 
-with tabs[2]:
+with tabs[3]:
     eps = campus.early_pickups(D)
     st.caption("Requests come from the parent app; the school approves them. Security checks the collector's ID against the pass and releases the child.")
     if not eps:
@@ -182,12 +260,27 @@ with tabs[2]:
             U.person_card({"id": e["student_id"], "name": e["name"], "gender": e["gender"], "class_name": e["class"].split("-")[0],
                            "section": e["class"].split("-")[-1], "code": e["code"], "transport": e["transport"]}, "STUDENT",
                           f"<div class='mini'>🕐 {e['pickup_time']} · collector <b>{e['collector']}</b> ({e['relation']}, QID {e['collector_id'] or '—'}) · "
-                          f"{e['reason']}</div>{U.pill(stt[0], stt[1])}", size=56)
+                          f"{e['reason']}</div>{U.pill(stt[0], stt[1])} "
+                          + (U.pill(f"Ready at the gate since {e['ready_ts'][11:16]}", "green") if e.get("ready_ts") and e["status"] == "APPROVED" else "")
+                          + ("" if SX.collector_allowed(e["student_id"], e["collector"], e["collector_id"]) else " " + U.pill("Collector NOT on the allowed list", "red")),
+                          size=56)
+            if e["status"] == "APPROVED":
+                with st.expander("Who may collect (photos)"):
+                    st.markdown(SX.collectors_html(e["student_id"], 52, e["collector"]), unsafe_allow_html=True)
         if e["status"] == "APPROVED" and b.button("✅ ID checked — release", key=f"eprel{e['id']}", type="primary", width="stretch"):
-            st.session_state["sec_last"] = campus.gate_scan(e["pass_code"], gate, user["display_name"], direction="OUT", method="EARLY_PICKUP")
+            do_scan(e["pass_code"], "OUT", "EARLY_PICKUP")
             st.rerun()
+    gps_ = SX.gate_passes()
+    wd_ = SX.DAYS[db.now().weekday()]
+    todays = [g_ for g_ in gps_ if wd_ in (g_["days"] or "").split(",") and g_["valid_from"] <= D <= (g_["valid_to"] or "9999")]
+    with st.expander(f"🎫 Standing gate passes valid today ({len(todays)} of {len(gps_)})"):
+        st.caption("Bus students collected by a named person on set days (set up by the office). Scan the student's card or the pass code at "
+                   "dismissal — the child is taken off the home bus list automatically.")
+        st.dataframe(pd.DataFrame([{"Pass": g_["pass_code"], "Student": g_["name"], "Class": g_["class"], "Days": g_["days"],
+                                    "Collector": f"{g_['collector']} ({g_['relation']})", "Note": g_["note"]} for g_ in todays]),
+                     hide_index=True, width="stretch")
 
-with tabs[3]:
+with tabs[4]:
     al = campus.alerts(D, None, "security")
     if not al:
         st.success("No security alerts today.")
@@ -219,14 +312,14 @@ with tabs[3]:
                         campus.resolve_alert(a_["id"], user["display_name"], note.strip() or "Resolved")
                         st.rerun()
 
-with tabs[4]:
+with tabs[5]:
     gl = campus.gate_log(D, None if st.toggle("All gates", value=True, key="gl_all") else gate)
     st.dataframe(pd.DataFrame([{"Time": r["ts"][11:19], "Gate": (r["gate"] or "").replace("Gate ", "G"), "Who": r["ptype"].title(),
                                 "Name": r["person"] or r["code"], "Dir": r["dir"], "Method": (r["method"] or "").replace("_", " ").title(),
                                 "Result": r["result"], "Note": r["reason"] or "", "By": r["operator"]} for r in gl]),
                  hide_index=True, width="stretch", height=480)
 
-with tabs[5]:
+with tabs[6]:
     pr = campus.patrol(D)
     ok = sum(1 for p in pr if p["status"] == "ARRIVED")
     U.kpis([("CHECKPOINTS TODAY", len(pr), "planned so far", "#1B2559", ""), ("ON TIME", ok, f"{ok / max(1, len(pr)):.0%}", "#2E9E5B", "green"),

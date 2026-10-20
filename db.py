@@ -38,7 +38,8 @@ def mlabel(batch, grp):
     return GROUP_LABEL.get((batch, grp), f"Shift {batch} {grp}")
 
 
-ROLES = ["admin", "manager", "dispatcher", "driver", "supervisor", "caretaker", "receiving", "guardian", "security", "teacher", "principal"]
+ROLES = ["admin", "manager", "dispatcher", "driver", "supervisor", "caretaker", "receiving", "guardian", "security", "teacher", "principal",
+         "fleet_supervisor", "senior_manager", "vp"]
 MFA_ROLES = {"admin", "manager"}
 
 SCHEMA = """
@@ -256,6 +257,23 @@ def init_db(reset=False, seed_data=True, **kw):
     if empty and seed_data:
         import dps_data
         dps_data.generate(**kw)
+    if seed_data:
+        seed_extras()
+
+
+def seed_extras():
+    """Fleet, security-extension and integration demo data + their sign-ins (idempotent; skipped on an empty school)."""
+    if not q1("SELECT COUNT(*) n FROM buses")["n"]:
+        return
+    import fleet
+    import integrations
+    import security_ext
+    fleet.seed()
+    security_ext.seed()
+    integrations.seed_telematics()
+    for u, role, name in (("fleetsup", "fleet_supervisor", "Fleet supervisor"), ("srmanager", "senior_manager", "Senior Manager (Facilities)"),
+                          ("vp", "vp", "Vice President")):
+        x("INSERT OR IGNORE INTO users(username, pin_hash, role, display_name) VALUES (?,?,?,?)", (u, pin_hash("1234"), role, name))
 
 
 # ------------------------------------------------------------------ common lookups

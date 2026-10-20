@@ -84,3 +84,43 @@ def id_cards_pdf(students, school_name):
         c.setFillColorRGB(0, 0, 0)
     c.save()
     return buf.getvalue()
+
+
+def rear_tags_pdf(buses, school_name):
+    """A4 sheet of rear-door tags (2 x 4 per page): a large QR + the bus number, to fix inside the rear door of each bus.
+    Crews scan it during the pre/post-trip check and security scans it during the after-trip inspection."""
+    import security_ext as SX
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    W, H = A4
+    cw, ch = 90 * mm, 66 * mm
+    mx = (W - 2 * cw) / 3
+    my = (H - 4 * ch) / 5
+    for i, b in enumerate(buses):
+        k = i % 8
+        if i and k == 0:
+            c.showPage()
+        col, row = k % 2, k // 2
+        x = mx + col * (cw + mx)
+        y = H - (row + 1) * (ch + my)
+        code = SX.rear_tag_code(b["bus_no"])
+        c.setStrokeColorRGB(0.11, 0.15, 0.35)
+        c.setLineWidth(1.2)
+        c.roundRect(x, y, cw, ch, 4 * mm)
+        c.setFillColorRGB(0.11, 0.15, 0.35)
+        c.rect(x, y + ch - 11 * mm, cw, 11 * mm, stroke=0, fill=1)
+        c.setFillColorRGB(1, 1, 1)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(x + 5 * mm, y + ch - 7.5 * mm, "REAR DOOR — SCAN HERE")
+        c.setFont("Helvetica", 7.5)
+        c.drawRightString(x + cw - 5 * mm, y + ch - 7.5 * mm, school_name[:38])
+        c.drawImage(ImageReader(io.BytesIO(qr_png(code, 10))), x + 4 * mm, y + 5 * mm, 46 * mm, 46 * mm)
+        c.setFillColorRGB(0.1, 0.12, 0.2)
+        c.setFont("Helvetica-Bold", 22)
+        c.drawString(x + 53 * mm, y + 36 * mm, b["bus_no"])
+        c.setFont("Helvetica", 8.5)
+        for j, line in enumerate(["Crew: scan during the", "pre- and post-trip check.", "Security: scan during the", "after-trip inspection.",
+                                  f"Code {code}"]):
+            c.drawString(x + 53 * mm, y + (27 - 4.6 * j) * mm, line)
+    c.save()
+    return buf.getvalue()

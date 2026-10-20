@@ -633,7 +633,7 @@ def _apply(con, events, notify=True, rnd=None):
                 items = campus.PRE_CHECKS if d["kind"] == "PRE" else campus.POST_CHECKS
                 ans = {i: ("DEFECT" if i in d["defects"] else "OK") for _, i, _c in items}
                 campus.save_check(d["bus_id"], date, d.get("trip_no"), d["kind"], ans, f"drv{d['bus_id']:03d}", NAME.get(b["driver_id"], ""),
-                                  odometer=rnd.randint(40000, 260000), fuel=rnd.choice(["Full", "3/4", "1/2"]), when=when, con=con)
+                                  odometer=(rnd.randint(40000, 260000) and __import__('fleet').odo_model(d['bus_id'], when.date())), fuel=rnd.choice(["Full", "3/4", "1/2"]), when=when, con=con)
             elif kind == "VCLEAR":
                 v = q1("SELECT id FROM vehicle_checks WHERE bus_id=? AND date=? AND status='BLOCKED' ORDER BY id DESC LIMIT 1", (d["bus_id"], date), con)
                 if v:
@@ -729,6 +729,9 @@ def _apply(con, events, notify=True, rnd=None):
                                final_caretaker_id=caretaker_id, sweep_by=?, sweep_ts=?, closed_by=? WHERE id=?""",
                             (ts(when), lat, lon, sweeper, ts(when), f"sup{d['bus_id']:03d}", rid))
                 runs[(date, d["bus_id"], d["trip_no"])] = None
+                import security_ext
+                security_ext.sim_inspection(con, rid, d["bus_id"], d["trip_no"], date, when, random.Random(rid * 1009 + int(date.replace("-", ""))),
+                                            [("guard1", "Ram Bahadur Thapa"), ("guard2", "Anil Tamang"), ("guard3", "Mohammed Rafiq")])
             elif kind == "GATE":
                 con.execute("""INSERT INTO gate_scans(ts, date, ptype, pid, dir, gate_id, method, operator, result, reason, ref, code)
                                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -821,6 +824,8 @@ def apply_day(date, replay=True):
         con.commit()
     finally:
         con.close()
+    import security_ext
+    security_ext.check_missed_inspections(date, datetime.strptime(date + " 23:00", "%Y-%m-%d %H:%M"))
     return len(events)
 
 

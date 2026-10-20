@@ -321,6 +321,23 @@ def broadcast_run(run_id, kind, text, user, role, con=None):
         return len(lines)
 
 
+def auto_delay_notice(run_id, user="system", role="system", con=None):
+    """A trip that starts more than `delay_notice_min` (default 20) minutes after its session start: tell every parent on it, once.
+    Returns the minutes late (0 = on time). The vehicle tracker feed can call the same notice when a bus falls behind on the road."""
+    run = get_run(run_id, con)
+    if not run or not run["start_ts"]:
+        return 0
+    thr = int(db.setting("delay_notice_min", "20", con) or 20)
+    w0 = datetime.strptime(f"{run['date']} {db.TRIPS[run['trip_no']]['window'][0]}", "%Y-%m-%d %H:%M")
+    late = int((datetime.strptime(run["start_ts"], "%Y-%m-%d %H:%M:%S") - w0).total_seconds() // 60)
+    if late <= thr:
+        return 0
+    if q1("SELECT id FROM notifications WHERE run_id=? AND kind='DELAY' LIMIT 1", (run_id,), con):
+        return late
+    broadcast_run(run_id, "DELAY", f"running about {late} minutes behind schedule today. We will keep you updated.", user, role, con)
+    return late
+
+
 # ------------------------------------------------------------------ incidents
 def open_incident(kind, severity, details, run_id=None, bus_id=None, student_id=None, con=None, when=None):
     return x("""INSERT INTO incidents(ts, run_id, bus_id, student_id, kind, severity, details, status) VALUES (?,?,?,?,?,?,?,?)""",
