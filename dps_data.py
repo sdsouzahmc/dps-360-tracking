@@ -824,10 +824,25 @@ def apply_day(date, replay=True):
     return len(events)
 
 
+def today_start_mode():
+    """'zero' (default): each new day starts empty — all totals 0 except students enrolled; testers' scans are the only activity.
+    'simulate': the demo school day plays automatically. Set "today_start" in maintenance.json."""
+    import os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maintenance.json")
+    try:
+        return json.load(open(path)).get("today_start", "zero")
+    except Exception:
+        return "zero"
+
+
 def prepare_today(now=None):
-    """Store today's script and apply everything that is already due."""
+    """Store today's script and apply everything that is already due — or, in 'zero' mode, start the day empty."""
     now = now or db.now()
     date = now.strftime("%Y-%m-%d")
+    if today_start_mode() == "zero" and db.setting("sim_live_day") != date and db.setting("sim_day") != date:
+        db.set_setting("sim_off_day", date)
+        db.set_setting("sim_day", date)
+        return 0
     with _LOCK:
         con = db.connect()
         try:
@@ -908,6 +923,7 @@ def clear_today(user="admin"):
     _wipe_today(date)
     db.set_setting("sim_off_day", date)
     db.set_setting("sim_day", date)
+    db.set_setting("sim_live_day", "")
     db.audit(user, "admin", "TEST_RESET_DAY_ZERO", "day", date, "today cleared, simulation off for today")
     return True
 
@@ -921,6 +937,7 @@ def replay_today_at(hm):
         db.set_clock_offset(0)
     else:
         db.set_clock_offset((datetime.strptime(f"{date} {hm}", "%Y-%m-%d %H:%M") - real).total_seconds())
+    db.set_setting("sim_live_day", db.today())       # chosen on purpose: play the demo day even in 'zero' mode
     prepare_today(db.now())
     return True
 

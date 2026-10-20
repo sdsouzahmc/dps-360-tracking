@@ -147,7 +147,7 @@ def board(D=None):
         if not sr.empty:
             ch = alt.Chart(sr).mark_area(opacity=.55, interpolate="monotone").encode(
                 x=alt.X("time:T", title=None, axis=alt.Axis(format="%H:%M", labelColor="#4A5272")),
-                y=alt.Y("students:Q", title=None, stack=None),
+                y=alt.Y("students:Q", title=None, stack=None, axis=alt.Axis(format="d", tickMinStep=1), scale=alt.Scale(domainMin=0, nice=True)),
                 color=alt.Color("where:N", scale=alt.Scale(domain=["On campus", "On buses"], range=["#2E9E5B", "#3D4FD6"]),
                                 legend=alt.Legend(orient="top-left", title=None)),
                 tooltip=[alt.Tooltip("time:T", format="%H:%M"), "where", "students"])

@@ -1,5 +1,7 @@
 {
   "_help": "Test-support settings. reserved_buses: the simulated school day never runs these buses (testers run them by hand, every day). actions: one-off actions applied once per database on that date.",
+  "today_start": "zero",
+  "_today_start_help": "zero = every day starts with all totals 0 except students enrolled (previous days keep their full data). simulate = the demo school day plays automatically. Setup -> Demo tools -> replay still plays today on demand.",
   "reserved_buses": ["BUS-001", "BUS-026"],
   "actions": [
     {"id": "reset-bus001-2026-10-18", "type": "reset", "bus": "BUS-001", "date": "2026-10-18"},
