@@ -69,6 +69,9 @@ with left:
         import security_ext as SX
         st.markdown("**Parents and allowed collectors** (photo check at the gate)")
         st.markdown(SX.collectors_html(sid, 52), unsafe_allow_html=True)
+        _pu = db.parent_userids().get(sid, [])
+        if _pu:
+            st.markdown("**Parent userID** (sign-in) · " + " · ".join(f"{x['name']} ({x['relation']}): `{', '.join(x['logins']) or '—'}`" for x in _pu))
         _gp = SX.gate_passes(True, sid)
         if _gp:
             st.markdown("**Standing gate pass** · " + " · ".join(f"{x['pass_code']} {x['days']} → {x['collector']}" for x in _gp))

@@ -198,6 +198,7 @@ def login():
 | Teacher (Grade 5-A) | `teacher1` | 1234 |
 | Any class teacher: t + grade + section | `t5a`, `tkg1a`, `t12j` … | 1234 |
 | Parent | `g001` … `g040` | 1234 |
+| Any parent: p + 5-digit number (Reports → Parent logins) | `p00001` … | 1234 |
 | Test parents per tester (children on that tester's bus / classes) | `pa1-01…`, `pa2-01…`, `pb1-01…`, `pb2-01…` | 1234 |
 | Bus supervisor / driver | `sup001` / `drv001` | 1234 |
 | Fleet approvers: supervisor, senior manager, VP | `fleetsup`, `srmanager`, `vp` | 1234 |""")

@@ -195,11 +195,16 @@ def r_stops(f):
 
 def r_attendance(f):
     w, p = run_filter(f, m="m")
-    return df(f"""SELECT s.code AS Student_ID, s.name AS Student, s.class_name||s.section AS Class, s.batch AS Batch, s.grp AS "Group",
+    pu = db.parent_userids()
+    out = df(f"""SELECT s.id AS _sid, s.code AS Student_ID, s.name AS Student, s.class_name||s.section AS Class, s.batch AS Batch, s.grp AS "Group",
         b.bus_no AS "Home bus", COUNT(m.id) AS "Planned journeys", SUM(m.status IN ('COMPLETED','RETURNED')) AS Travelled,
         SUM(m.status='ABSENT_DECLARED') AS Absent, SUM(m.status='NO_SHOW') AS "No show"
         FROM manifest m JOIN trip_runs r ON r.id=m.run_id JOIN students s ON s.id=m.student_id JOIN buses b ON b.id=s.bus_id
         WHERE {w} GROUP BY s.id ORDER BY "No show" DESC, s.name""", p)
+    if not out.empty:
+        out["Parent userID"] = [_parent_col(pu, int(i)) for i in out["_sid"]]
+        out = out.drop(columns=["_sid"])
+    return out
 
 
 def r_receipt(f):
@@ -405,8 +410,44 @@ def r_journey(f):
     return _status(out, "Line status")
 
 
+def _parent_col(pu, sid):
+    return "; ".join(f"{', '.join(p['logins']) or '—'} ({p['relation']})" for p in pu.get(sid, []))
+
+
+def r_parents(f):
+    """Parent logins by student."""
+    pu = db.parent_userids()
+    sql = """SELECT s.id, s.code, s.name, s.class_name, s.section, s.transport, s.batch, s.grp,
+                    (SELECT b.bus_no FROM trip_assign ta JOIN buses b ON b.id=ta.bus_id WHERE ta.student_id=s.id ORDER BY ta.trip_no LIMIT 1) bus
+             FROM students s WHERE s.active=1"""
+    a = []
+    if f.get("classes"):
+        sql += f" AND s.class_name IN ({','.join('?' * len(f['classes']))})"
+        a += list(f["classes"])
+    if f.get("q"):
+        sql += " AND (s.name LIKE ? OR s.code LIKE ? OR s.id IN (SELECT sg.student_id FROM student_guardians sg JOIN guardians g ON g.id=sg.guardian_id "
+        sql += "WHERE g.name LIKE ? OR g.phone LIKE ?) OR s.id IN (SELECT sg.student_id FROM student_guardians sg JOIN users u ON u.guardian_id=sg.guardian_id WHERE u.username=?))"
+        t = f"%{f['q'].strip()}%"
+        a += [t, t, t, t, f["q"].strip().lower()]
+    rows = []
+    for s in df_rows(sql + " ORDER BY s.class_name, s.section, s.name", a):
+        for p in pu.get(s["id"], [{"name": "", "relation": "", "phone": "", "logins": []}]):
+            rows.append({"Student_ID": s["code"], "Student": s["name"], "Class": f"{s['class_name']}-{s['section']}",
+                         "Transport": "Bus" if s["transport"] == "BUS" else "Private", "Bus": s["bus"] or "",
+                         "Parent": p["name"], "Relation": p["relation"], "Phone": p["phone"],
+                         "Parent userID": ", ".join(p["logins"]) or "—"})
+    out = pd.DataFrame(rows)
+    out.attrs["note"] = "Parents sign in with the Parent userID (demo PIN 1234). One row per parent; a family with several children appears on each child."
+    return out
+
+
+def df_rows(sql, params=()):
+    return db.q(sql, params)
+
+
 def r_on_campus(f):
     import campus
+    pu = db.parent_userids()
     from datetime import datetime as _dt
     at = f.get("at") or (_dt.strptime(f["d2"] + " 23:59", "%Y-%m-%d %H:%M"))
     rows = campus.on_campus_at(at.strftime("%Y-%m-%d"), at)
@@ -416,7 +457,8 @@ def r_on_campus(f):
         rows = [r for r in rows if r["transport"] in f["transport"]]
     out = pd.DataFrame([{"#": i + 1, "Class": f"{r['class_name']}-{r['section']}", "Student": r["name"], "Student_ID": r["code"],
                          "Card": r["card"] or "", "Transport": "Bus" if r["transport"] == "BUS" else "Private", "Arrived": (r["arrived"] or "")[11:16],
-                         "Came in via": r["via"], "Class mark": (r["class_mark"] or "").title(), "Class teacher": r["teacher"] or ""}
+                         "Came in via": r["via"], "Class mark": (r["class_mark"] or "").title(), "Class teacher": r["teacher"] or "",
+                         "Parent userID": _parent_col(pu, r["id"])}
                         for i, r in enumerate(rows)])
     out.attrs["note"] = f"On campus at {at:%A %d %b %Y, %H:%M} — {len(rows):,} students."
     out.attrs["rows"] = rows
@@ -450,6 +492,8 @@ REPORTS = [
     ("corrections", "Data quality", "Corrections", "Requested and approved changes. Original events are never altered; corrections are stored separately.", r_corrections, None),
     ("sync", "Data quality", "Offline & sync", "Events received more than 60 s after capture, sync conflicts and device clock issues.", r_sync, None),
     ("gps", "Data quality", "GPS quality", "Share of accepted scans without a GPS fix and the average reported accuracy, per bus.", r_gps, None),
+    ("parents", "Parents", "Parent logins (Parent userID by student)", "Every student with each parent's name, relation, phone and the Parent userID they sign in "
+     "with. Search by student, parent name, phone or user ID to verify who a parent is before helping them log in.", r_parents, "student"),
     ("notifications", "Parents", "Notification delivery", "Messages by type and channel: delivered, failed, retried and delayed-offline.", r_notifications, None),
     ("badges", "Setup", "Badge changes", "Revoked / replaced badges and any scan attempts made with a revoked badge.", r_badges, None),
     ("audit", "Setup", "Audit log", "Who did what and when (logins, trips, approvals, setup changes). Latest 5,000 entries.", r_audit, None),

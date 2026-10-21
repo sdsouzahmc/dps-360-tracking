@@ -48,6 +48,13 @@ with st.container(border=True):
         if f["at"] > _now:
             f["at"] = _now
         st.caption("The date range, trip, batch, group and bus filters above do not apply to this report.")
+    if key == "parents":
+        o1, o2 = st.columns([2, 2])
+        _cls = [r["class_name"] for r in db.q("SELECT DISTINCT class_name FROM students WHERE active=1")]
+        _cls.sort(key=lambda c: (0 if c.startswith("KG") else 1, int("".join(ch for ch in c if ch.isdigit()) or 0)))
+        f["classes"] = o1.multiselect("Grade", _cls, key="pl_c")
+        f["q"] = o2.text_input("Search", placeholder="Student name / ID, parent name, phone or user ID", key="pl_q")
+        st.caption("The date, trip, batch, group and bus filters above do not apply to this report.")
     if key == "journey":
         st_list = db.q("SELECT id, code, name FROM students ORDER BY name")
         f["student"] = st.selectbox("Student", [s["id"] for s in st_list], format_func=lambda i: next(f"{s['name']} ({s['code']})" for s in st_list if s["id"] == i))

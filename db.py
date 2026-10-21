@@ -312,13 +312,31 @@ def test_parents(tester, limit=10, con=None, _cache={}):
 _LOGIN_LOCK = __import__("threading").Lock()
 
 
+def parent_login(guardian_id):
+    """Every parent's sign-in: 'p' + guardian number (5 digits), e.g. p00123 (demo PIN 1234). g001…g040 and the pa/pb test logins also work."""
+    return f"p{int(guardian_id):05d}"
+
+
+def parent_userids(con=None):
+    """student_id → [{name, relation, phone, logins}] for every parent of the student (all their sign-in user IDs)."""
+    logins = {}
+    for r in q("SELECT username, guardian_id FROM users WHERE role='guardian' AND guardian_id IS NOT NULL AND active=1 ORDER BY username", (), con):
+        logins.setdefault(r["guardian_id"], []).append(r["username"])
+    out = {}
+    for r in q("""SELECT sg.student_id, g.id, g.name, g.relation, g.phone FROM student_guardians sg JOIN guardians g ON g.id=sg.guardian_id
+                  ORDER BY sg.student_id, sg.is_primary DESC, g.id""", (), con):
+        ids = sorted(logins.get(r["id"], []), key=lambda u: (not u.startswith("p0"), u))
+        out.setdefault(r["student_id"], []).append({"name": r["name"], "relation": r["relation"], "phone": r["phone"], "logins": ids})
+    return out
+
+
 def ensure_demo_logins():
     """Class-teacher and test-parent sign-ins. Runs on every app start (cheap after the first time) so a redeploy picks them up
     without rebuilding the database."""
-    if setting("demo_logins_v", "") == "2" or not _LOGIN_LOCK.acquire(blocking=False):
+    if setting("demo_logins_v", "") == "3" or not _LOGIN_LOCK.acquire(blocking=False):
         return                       # done already, or another session is doing it right now
     try:
-        if setting("demo_logins_v", "") == "2" or not q1("SELECT COUNT(*) n FROM buses")["n"]:
+        if setting("demo_logins_v", "") == "3" or not q1("SELECT COUNT(*) n FROM buses")["n"]:
             return
         _ensure_demo_logins()
     finally:
@@ -334,9 +352,12 @@ def _ensure_demo_logins():
     for t in TEST_PARENT_SETS:
         for login, gid in test_parents(t):
             rows.append((login, pin_hash("1234"), "guardian", None, gid, f"{gnames.get(gid, '')} (test parent {t})"))
+    ph = pin_hash("1234")
+    for gid, gname in gnames.items():          # a sign-in for every parent
+        rows.append((parent_login(gid), ph, "guardian", None, gid, gname))
     with tx() as c:
         c.executemany("INSERT OR IGNORE INTO users(username, pin_hash, role, staff_id, guardian_id, display_name) VALUES (?,?,?,?,?,?)", rows)
-        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('demo_logins_v', '2')")
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('demo_logins_v', '3')")
 
 
 def seed_extras():
