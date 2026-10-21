@@ -276,53 +276,67 @@ TEST_PARENT_SETS = {   # tester → (login prefix, how to pick children): every 
 B_CLASSES = ("Grade 5-A", "Grade 9-D", "Grade 6-Q", "KG2-C")
 
 
-def test_parents(tester, limit=10, con=None):
+def test_parents(tester, limit=10, con=None, _cache={}):
     """One parent per family whose children ALL fit the tester's range and touch no other team's data:
     A1 / A2 → every child rides only the reserved bus (BUS-001 / BUS-026) and is not in a Team B class;
-    B1 / B2 → every child is in the tester's classes and rides no Team A bus (BUS-001…049, BUS-099)."""
+    B1 / B2 → every child is in the tester's classes and rides no Team A bus (BUS-001…049, BUS-099).
+    All data is read in 3 queries (fast on a large school)."""
     prefix, kind, val = TEST_PARENT_SETS[tester]
-    bclass = {r["id"] for r in q(f"SELECT id FROM students WHERE (class_name || '-' || section) IN ({','.join('?' * len(B_CLASSES))})", B_CLASSES, con)}
+    cls = {r["id"]: f"{r['class_name']}-{r['section']}" for r in q("SELECT id, class_name, section FROM students", (), con)}
+    buses = {}
+    for r in q("SELECT ta.student_id, b.bus_no FROM trip_assign ta JOIN buses b ON b.id=ta.bus_id", (), con):
+        buses.setdefault(r["student_id"], set()).add(r["bus_no"])
+    fam = {}
+    for r in q("SELECT guardian_id, student_id FROM student_guardians ORDER BY guardian_id", (), con):
+        fam.setdefault(r["guardian_id"], set()).add(r["student_id"])
+    a_bus = lambda sid: any(b <= "BUS-049" or b == "BUS-099" for b in buses.get(sid, ()))
     if kind == "bus":
-        inset = {r["student_id"] for r in q("SELECT DISTINCT ta.student_id FROM trip_assign ta JOIN buses b ON b.id=ta.bus_id WHERE b.bus_no=?", (val,), con)}
-        bad = {r["student_id"] for r in q("SELECT DISTINCT ta.student_id FROM trip_assign ta JOIN buses b ON b.id=ta.bus_id WHERE b.bus_no<>?", (val,), con)}
-        ok = inset - bad - bclass
+        fits = [lambda sid: buses.get(sid) == {val} and cls.get(sid) not in B_CLASSES]
     else:
-        mine = {r["id"] for r in q(f"SELECT id FROM students WHERE (class_name || '-' || section) IN ({','.join('?' * len(val))})", val, con)}
-        a_bus = {r["student_id"] for r in q("""SELECT DISTINCT ta.student_id FROM trip_assign ta JOIN buses b ON b.id=ta.bus_id
-                                               WHERE b.bus_no <= 'BUS-049' OR b.bus_no='BUS-099'""", (), con)}
-        ok = mine - a_bus
-    groups = [ok] if kind == "bus" else [ok & {r["id"] for r in q("SELECT id FROM students WHERE (class_name || '-' || section)=?", (c,), con)}
-                                         for c in val]
-    per = -(-limit // len(groups))
+        fits = [(lambda c: (lambda sid: cls.get(sid) == c and not a_bus(sid)))(c) for c in val]
+    per = -(-limit // len(fits))
     out, seen = [], set()
-    allg = q("SELECT DISTINCT guardian_id FROM student_guardians ORDER BY guardian_id", (), con)
-    for grp_ in groups:
+    for fit in fits:
         n = 0
-        for g in allg:
-            kids = frozenset(r["student_id"] for r in q("SELECT student_id FROM student_guardians WHERE guardian_id=?", (g["guardian_id"],), con))
-            if kids and kids <= grp_ and kids not in seen:
+        for gid in sorted(fam):
+            kids = frozenset(fam[gid])
+            if kids not in seen and all(fit(k) for k in kids):
                 seen.add(kids)
-                out.append(g["guardian_id"])
+                out.append(gid)
                 n += 1
-            if n >= per:
-                break
+                if n >= per:
+                    break
     return [(f"{prefix}{i + 1:02d}", gid) for i, gid in enumerate(out[:limit])]
+
+
+_LOGIN_LOCK = __import__("threading").Lock()
 
 
 def ensure_demo_logins():
     """Class-teacher and test-parent sign-ins. Runs on every app start (cheap after the first time) so a redeploy picks them up
     without rebuilding the database."""
-    if not q1("SELECT COUNT(*) n FROM buses")["n"] or setting("demo_logins_v", "") == "2":
-        return
+    if setting("demo_logins_v", "") == "2" or not _LOGIN_LOCK.acquire(blocking=False):
+        return                       # done already, or another session is doing it right now
+    try:
+        if setting("demo_logins_v", "") == "2" or not q1("SELECT COUNT(*) n FROM buses")["n"]:
+            return
+        _ensure_demo_logins()
+    finally:
+        _LOGIN_LOCK.release()
+
+
+def _ensure_demo_logins():
+    rows = []
     for c in q("""SELECT c.name, c.section, c.teacher_id, s.name tname FROM classes c JOIN staff s ON s.id=c.teacher_id WHERE c.teacher_id IS NOT NULL"""):
-        x("INSERT OR IGNORE INTO users(username, pin_hash, role, staff_id, display_name) VALUES (?,?,?,?,?)",
-          (teacher_login(c["name"], c["section"]), pin_hash("1234"), "teacher", c["teacher_id"], f"{c['tname']} ({c['name']}-{c['section']})"))
+        rows.append((teacher_login(c["name"], c["section"]), pin_hash("1234"), "teacher", c["teacher_id"], None,
+                     f"{c['tname']} ({c['name']}-{c['section']})"))
+    gnames = {r["id"]: r["name"] for r in q("SELECT id, name FROM guardians", ())}
     for t in TEST_PARENT_SETS:
         for login, gid in test_parents(t):
-            gname = q1("SELECT name FROM guardians WHERE id=?", (gid,))["name"]
-            x("INSERT OR IGNORE INTO users(username, pin_hash, role, guardian_id, display_name) VALUES (?,?,?,?,?)",
-              (login, pin_hash("1234"), "guardian", gid, f"{gname} (test parent {t})"))
-    set_setting("demo_logins_v", "2")
+            rows.append((login, pin_hash("1234"), "guardian", None, gid, f"{gnames.get(gid, '')} (test parent {t})"))
+    with tx() as c:
+        c.executemany("INSERT OR IGNORE INTO users(username, pin_hash, role, staff_id, guardian_id, display_name) VALUES (?,?,?,?,?,?)", rows)
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('demo_logins_v', '2')")
 
 
 def seed_extras():
