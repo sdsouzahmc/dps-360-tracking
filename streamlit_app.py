@@ -27,6 +27,7 @@ def _boot():
 
 
 _boot()
+db.ensure_demo_logins()   # class-teacher + test-parent sign-ins (also on a redeploy, without rebuilding the data)
 import dps_data   # noqa: E402
 dps_data.tick()   # the simulated school day moves on to the current time
 dps_data.apply_maintenance()   # one-off test-support actions (maintenance.json)
@@ -197,6 +198,7 @@ def login():
 | Teacher (Grade 5-A) | `teacher1` | 1234 |
 | Any class teacher: t + grade + section | `t5a`, `tkg1a`, `t12j` … | 1234 |
 | Parent | `g001` … `g040` | 1234 |
+| Test parents per tester (children on that tester's bus / classes) | `pa1-01…`, `pa2-01…`, `pb1-01…`, `pb2-01…` | 1234 |
 | Bus supervisor / driver | `sup001` / `drv001` | 1234 |
 | Fleet approvers: supervisor, senior manager, VP | `fleetsup`, `srmanager`, `vp` | 1234 |""")
 
