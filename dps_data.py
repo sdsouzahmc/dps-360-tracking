@@ -536,7 +536,8 @@ def build_day(date, seed=None):
         E(_t(date, hm), "OVERSTAY_CHECK")
 
     # ---- class attendance (pre-filled list → teacher verifies → submit)
-    demo_cls = {r_["id"] for r_ in q("""SELECT c.id FROM classes c JOIN users u ON u.staff_id=c.teacher_id WHERE u.role='teacher'""")}
+    demo_cls = {r_["id"] for r_ in q("""SELECT c.id FROM classes c JOIN users u ON u.staff_id=c.teacher_id
+                                        WHERE u.role='teacher' AND u.username LIKE 'teacher%'""")}   # teacher1–4 only, not every class login
     for c in q("SELECT * FROM classes"):
         a_by = camp.SHIFT_TIMES[c["shift"]][1]
         if r.random() < 0.03 or (c["id"] in demo_cls and date == db.today()):

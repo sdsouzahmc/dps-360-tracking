@@ -336,6 +336,30 @@ def presence(date=None, now=None, con=None):
     return out
 
 
+REASON_NOT_ON_CAMPUS = {"ON_BUS": "On a bus now (boarded at school / on the way home)", "LEFT": "Left campus (bus home, collected or gate exit)",
+                        "ABSENT": "Marked absent", "NOT_ARRIVED": "No arrival scan yet", "UNACCOUNTED": "No scan — unaccounted",
+                        "NOT_SEEN": "No scan today"}
+
+
+def presence_rows(date=None, now=None, con=None):
+    """One row per active student: state now, last movement (time, where, how), class mark — for the 360 drill-down lists."""
+    date = date or db.today()
+    now = now or db.now()
+    pres = presence(date, now, con)
+    moves = last_moves(date, con=con)
+    bus = onboard_now(date, con)
+    att = {r["student_id"]: r["status"] for r in q("SELECT student_id, status FROM attendance WHERE date=?", (date,), con)}
+    out = []
+    for s_ in q("SELECT id, code, name, class_name, section, transport FROM students WHERE active=1", (), con):
+        m = moves.get(s_["id"])
+        b = bus.get(s_["id"])
+        last = (f"On {b['bus_no']} (Trip {b['trip_no']})" if b else
+                (f"{m['dir']} {m['ts'][11:16]} · " + (f"bus {m['ref']}" if m["method"] == "BUS" else m["gate"]) if m else ""))
+        out.append({"id": s_["id"], "code": s_["code"], "name": s_["name"], "class": f"{s_['class_name']}-{s_['section']}", "transport": s_["transport"],
+                    "state": pres.get(s_["id"]), "last": last, "mark": att.get(s_["id"], "")})
+    return out
+
+
 def student_card(student_id, con=None):
     return q1("""SELECT s.*, b.bus_no, c.id AS class_id, c.teacher_id, st.name AS teacher, bd.code AS card
                  FROM students s LEFT JOIN buses b ON b.id=s.bus_id LEFT JOIN classes c ON c.name=s.class_name AND c.section=s.section

@@ -113,14 +113,17 @@ def board(D=None):
             ("NOT SEEN", cnt["NOT_SEEN"] + cnt["UNACCOUNTED"], "no scan, no absence", "#D93025", "red" if cnt["NOT_SEEN"] else "green"),
         ])
     else:
+        _att_today = {r["student_id"]: r["status"] for r in db.q("SELECT student_id, status FROM attendance WHERE date=?", (D,))}
+        _present_cls = sum(1 for v in _att_today.values() if v in ("PRESENT", "LATE"))
         U.kpis([
             ("STUDENTS ENROLLED", tot, f"{stu['b']:,} by bus · {tot - stu['b']:,} private", "#1B2559", ""),
+            ("PRESENT IN CLASS", _present_cls, f"teacher attendance · {subm} classes submitted", "#7B5CD6", ""),
             ("ON CAMPUS NOW", cnt["ON_CAMPUS"], f"{cnt['ON_CAMPUS'] / max(1, tot):.0%} of students", "#2E9E5B", "green"),
             ("ON BUSES NOW", cnt["ON_BUS"], f"{len(active)} buses on the road", "#3D4FD6", ""),
             ("GONE HOME", cnt["LEFT"], "dropped / collected / left", "#9AA3BD", ""),
             ("ABSENT TODAY", cnt["ABSENT"], f"{decl} declared by parents", "#E07A1F", "orange"),
             ("UNACCOUNTED", cnt["UNACCOUNTED"], "not on campus, bus or absence list", "#D93025", "red" if cnt["UNACCOUNTED"] else "green"),
-        ])
+        ], n=7)
     U.kpis([
         ("BUS TRIPS" + ("" if past else " TODAY"), f"{closed}/{len(runs) if past else planned_total}",
          f"{closed} closed" if past else f"{len(active)} running · {planned_total - closed - len(active)} to go", "#3D4FD6", ""),
@@ -143,6 +146,43 @@ def board(D=None):
                                                     f"title='{U.STATE_LABEL[k]}: {cnt[k]}'></div>" for k in order if cnt[k]) + "</div>"
                     + "<div class='legend'>" + "".join(f"<span style='--c:{U.STATE_COLOR[k]}'>{U.STATE_LABEL[k]} <b>{cnt[k]:,}</b></span>"
                                                        for k in order if cnt[k]) + "</div>", unsafe_allow_html=True)
+        if not past:
+            _rows = campus.presence_rows(D, now)
+            _pc = [r for r in _rows if r["mark"] in ("PRESENT", "LATE")]
+            if _pc:
+                _st = Counter(r["state"] for r in _pc)
+                st.markdown(f"<div class='mini' style='margin-top:6px'>📋 <b>{len(_pc):,} present in class</b> (teacher attendance) → "
+                            + " · ".join(f"{U.STATE_LABEL.get(k, k)} {v}" for k, v in _st.most_common())
+                            + ". Children marked present who later boarded a home bus or left campus are no longer counted as on campus.</div>",
+                            unsafe_allow_html=True)
+            with st.expander("🔎 Who is in each number"):
+                f1_, f2_, f3_ = st.columns([2, 1.2, 1.2])
+                _opts = [k for k in order if cnt[k]] + ["PRESENT_NOT_ON_CAMPUS", "ABSENT_BUT_ON_CAMPUS"]
+                _lab = {**U.STATE_LABEL, "PRESENT_NOT_ON_CAMPUS": "Present in class, not on campus now", "ABSENT_BUT_ON_CAMPUS": "Marked absent but on campus"}
+                _k = f1_.selectbox("Show", _opts, format_func=lambda k: f"{_lab.get(k, k)}", key="d360_who")
+                _bus = f2_.text_input("Bus", placeholder="e.g. BUS-001", key="d360_who_bus").strip().upper()
+                _cl = f3_.text_input("Class", placeholder="e.g. Grade 5-A", key="d360_who_cls").strip().lower()
+                if _k == "PRESENT_NOT_ON_CAMPUS":
+                    sel_ = [r for r in _rows if r["mark"] in ("PRESENT", "LATE") and r["state"] != "ON_CAMPUS"]
+                elif _k == "ABSENT_BUT_ON_CAMPUS":
+                    sel_ = [r for r in _rows if r["mark"] == "ABSENT" and r["state"] == "ON_CAMPUS"]
+                else:
+                    sel_ = [r for r in _rows if r["state"] == _k]
+                if _bus:
+                    _ids = {x["student_id"] for x in db.q("""SELECT DISTINCT ta.student_id FROM trip_assign ta JOIN buses b ON b.id=ta.bus_id
+                                                             WHERE b.bus_no=?""", (_bus,))} | {x["student_id"] for x in db.q(
+                        "SELECT DISTINCT m.student_id FROM manifest m JOIN trip_runs r ON r.id=m.run_id JOIN buses b ON b.id=r.bus_id WHERE r.date=? AND b.bus_no=?",
+                        (D, _bus))}
+                    sel_ = [r for r in sel_ if r["id"] in _ids]
+                if _cl:
+                    sel_ = [r for r in sel_ if r["class"].lower() == _cl or r["class"].lower().replace("grade ", "") == _cl]
+                st.caption(f"{len(sel_):,} students")
+                st.dataframe(pd.DataFrame([{"Student": r["name"], "ID": r["code"], "Class": r["class"],
+                                            "Transport": "Bus" if r["transport"] == "BUS" else "Private",
+                                            "Now": U.STATE_LABEL.get(r["state"], r["state"]), "Last movement": r["last"],
+                                            "Class mark": (r["mark"] or "—").title(),
+                                            "Why not on campus": campus.REASON_NOT_ON_CAMPUS.get(r["state"], "") if r["state"] != "ON_CAMPUS" else ""}
+                                           for r in sel_[:2000]]), hide_index=True, width="stretch", height=300)
         sr = series_today(D, now)
         if not sr.empty:
             ch = alt.Chart(sr).mark_area(opacity=.55, interpolate="monotone").encode(

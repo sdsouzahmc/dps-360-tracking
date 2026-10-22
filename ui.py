@@ -80,10 +80,12 @@ def lines_table(lines, cols=("name", "class", "batch", "grp", "purpose", "stop_n
              "status": t("Status"), "entry_ts": t("Boarded"), "exit_ts": t("Got off"), "handover": t("Handover"),
              "recipient_name": t("Handed to"), "received_by": t("Received by"), "note": t("Note")}
     hl = set(highlight or ())
-    if hl:
-        lines = sorted(lines, key=lambda ln: ln.get("id") not in hl)
+    absent_st = ("ABSENT_DECLARED", "NO_SHOW")
+    lines = sorted(lines, key=lambda ln: (ln.get("id") not in hl, ln.get("status") not in absent_st)) if (hl or any(
+        ln.get("status") in absent_st for ln in lines)) else lines
     df = pd.DataFrame(lines)
     mark = [ln.get("id") in hl for ln in lines]
+    absent = [ln.get("status") in absent_st for ln in lines]
     df = df[[c for c in cols if c in df]]
     if "status" in df:
         df["status"] = df["status"].map(status_text)
@@ -98,9 +100,10 @@ def lines_table(lines, cols=("name", "class", "batch", "grp", "purpose", "stop_n
         if c in df:
             df[c] = df[c].fillna("—")
     df = df.rename(columns=names)
-    if hl and any(mark):
-        df.insert(0, " ", ["📍" if m else "" for m in mark])
-        sty = df.style.apply(lambda row: ["background-color:#FFF4C2;font-weight:600" if mark[row.name] else "" for _ in row], axis=1)
+    if (hl and any(mark)) or any(absent):
+        df.insert(0, " ", ["📍" if m else ("🚫" if a else "") for m, a in zip(mark, absent)])
+        sty = df.style.apply(lambda row: ["background-color:#FFF4C2;font-weight:600" if mark[row.name] else
+                                          ("background-color:#FDE3E1;color:#B3261E;font-weight:600" if absent[row.name] else "") for _ in row], axis=1)
         st.dataframe(sty, hide_index=True, width="stretch")
     else:
         st.dataframe(df, hide_index=True, width="stretch")

@@ -210,6 +210,10 @@ if not run:
                 cnt = mv.groupby(["batch", "grp", "purpose"]).agg(Planned=("student_id", "count"),
                                                                   Absent=("status", lambda s: (s == "ABSENT_DECLARED").sum())).reset_index()
                 st.dataframe(cnt.rename(columns={"batch": "Batch", "grp": "Group", "purpose": "Purpose"}), hide_index=True)
+            _abs = [ln for ln in plan if ln.get("status") == "ABSENT_DECLARED"]
+            if _abs:
+                msg("error", f"<b>{t('Absent today')} ({len(_abs)}):</b> " + ", ".join(f"{ln['name']} ({ln.get('stop_name') or ''})" for ln in _abs)
+                    + f" — {t('do not wait for them.')}")
             lines_table(plan, ("name", "code", "class", "batch", "grp", "purpose", "stop_name", "status"))
             if plan:
                 st.download_button(f"🖨 {t('Printable contingency roster')}", R.roster_pdf(plan, f"{bus['bus_no']} · {today} · Trip {n} roster"),
@@ -403,7 +407,7 @@ st.caption(f"{_total} {t('on the list')} = {_onb} {t('on board')} + {_expn} {t('
 if _absn:
     _abs_names = [ln.get("name") or db.q1("SELECT name FROM students WHERE id=?", (ln["student_id"],))["name"]
                   for ln in lines if ln["status"] in ("ABSENT_DECLARED", "NO_SHOW")]
-    st.caption(f"🚫 {t('Absent')} ({_absn}, {t('not counted as on board')}): " + ", ".join(_abs_names))
+    msg("error", f"<b>{t('Absent today')} ({_absn}):</b> " + ", ".join(_abs_names) + f" — {t('not counted as on board, do not wait for them.')}")
 
 # all assigned students boarded -> banner + one voice announcement per trip (crew and driver screens)
 _exp_drop = sum(1 for ln in lines if ln["purpose"] == "DROPOFF" and ln["status"] == "EXPECTED")
