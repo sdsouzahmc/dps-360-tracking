@@ -1,4 +1,4 @@
-"""Shared DPS 360 UI pieces: KPI tiles, person cards with photo, status pills, the vehicle checklist form, small charts."""
+"""Shared Flexitrack 360 UI pieces: KPI tiles, person cards with photo, status pills, the vehicle checklist form, small charts."""
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -132,7 +132,7 @@ def vehicle_check_form(bus_id, kind, trip_no, user, key):
         fuel = c2.selectbox("Fuel", ["Full", "3/4", "1/2", "1/4", "Reserve"], key=f"vc_{key}_{kind}_fuel")
         tag = st.text_input("Rear-door tag *", value=st.session_state.get(tagk, ""), key=f"vc_{key}_{kind}_tag",
                             placeholder=f"Walk to the rear door and scan its tag (demo: {SX.rear_tag_code(bus['bus_no'])})",
-                            help="Proves the check was done from the back of the bus (DPS requirement).")
+                            help="Proves the check was done from the back of the bus (school requirement).")
         ok = st.form_submit_button("Submit check", type="primary", width="stretch")
     if ok:
         if not SX.rear_tag_ok(bus_id, tag):

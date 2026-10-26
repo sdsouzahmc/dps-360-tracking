@@ -88,7 +88,7 @@ with tabs[0]:
             st.session_state["sec_nonce"] = val["nonce"]
             do_scan(val["code"], None if direction == "Auto" else direction, "CAMERA")
             st.rerun()
-        st.caption("Reads the barcode on DPS ID cards (Code 128 / Code 39) and the QR code on visitor and early-pickup passes.")
+        st.caption("Reads the barcode on school ID cards (Code 128 / Code 39) and the QR code on visitor and early-pickup passes.")
     with t_read:
         with st.form("sec_typed", clear_on_submit=True):
             code = st.text_input("Card / pass number", placeholder="Tap the card on a USB / Bluetooth reader, or type the number")

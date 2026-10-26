@@ -1,4 +1,4 @@
-"""DPS 360 security additions (DPS requirements, Security module):
+"""Flexitrack 360 security additions (DPS requirements, Security module):
 bus inspection after every trip (no child left behind), rear-door bus tags, visitor blacklist, standing gate passes,
 authorised-collector check with photos, "ready at the gate" notice, and scan-speed logging for the bus and gate scan points."""
 import json

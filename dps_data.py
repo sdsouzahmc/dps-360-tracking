@@ -1,4 +1,4 @@
-"""DPS 360 demo data at DPS scale (~100 buses, ~4,800 students, 5 daily sessions) and a day simulator.
+"""Flexitrack 360 demo data at DPS scale (~100 buses, ~4,800 students, 5 daily sessions) and a day simulator.
 
 generate() builds the school (classes, teachers, staff, gates), families, students with homes across Doha, ~420 shared pickup
 points, the per-trip bus assignment (98 / 35 / 98 / 28 / 16 buses) and the routes, then replays the last school days and

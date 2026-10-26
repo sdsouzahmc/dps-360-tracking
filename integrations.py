@@ -1,6 +1,6 @@
-"""DPS 360 integrations (DPS IT requirements + 14 Sep email):
+"""Flexitrack 360 integrations (DPS IT requirements + 14 Sep email):
 - CSMS ERP sync: students, parents, staff, vehicles, routes and stops pulled from the ERP (API or exported file), shown as a diff, then applied.
-- Woqod fuel: statement import (CSV / Excel) now; the same mapping takes Woqod's API feed when DPS gets access.
+- Woqod fuel: statement import (CSV / Excel) now; the same mapping takes Woqod's API feed when the school gets access.
 - Vehicle tracker (GPS / telematics): positions → odometer, speed alerts, ETA; harsh braking / acceleration events → driver behaviour.
 - RFID readers: a tag read on a bus or gate reader becomes the same scan as a card (wrong bus / unknown tag checks unchanged).
 - API keys for the REST API (api.py)."""
@@ -99,7 +99,7 @@ def _pick(row, names):
 
 
 def csms_diff(entity, rows, con=None):
-    """Compare ERP rows with DPS 360: new, changed (field by field) and missing (in DPS 360 but not in the ERP)."""
+    """Compare ERP rows with Flexitrack 360: new, changed (field by field) and missing (in Flexitrack 360 but not in the ERP)."""
     f = CSMS_FIELDS[entity]
     key = {"students": "code", "staff": "card_no", "buses": "bus_no"}[entity]
     table = {"students": "students", "staff": "staff", "buses": "buses"}[entity]
@@ -158,10 +158,10 @@ def csms_config(con=None):
 
 
 def csms_pull(entity, con=None):
-    """Pull one entity from the CSMS API (GET {base_url}/{entity}) — used once DPS IT shares the endpoint and key."""
+    """Pull one entity from the CSMS API (GET {base_url}/{entity}) — used once school IT shares the endpoint and key."""
     cfg = csms_config(con)
     if not cfg["base_url"] or not cfg["has_key"]:
-        raise RuntimeError("CSMS API not configured yet — set the base URL and key in Setup → Integrations (from DPS IT).")
+        raise RuntimeError("CSMS API not configured yet — set the base URL and key in Setup → Integrations (from school IT).")
     import urllib.request
     req = urllib.request.Request(f"{cfg['base_url'].rstrip('/')}/{entity}", headers={"Authorization": f"Bearer {db.setting('csms_api_key', '', con)}",
                                                                                    "Accept": "application/json"})
@@ -405,8 +405,8 @@ def status(con=None):
     lp = q1("SELECT MAX(ts) t, COUNT(DISTINCT bus_id) n FROM gps_positions WHERE ts>=?", (ts(db.now() - timedelta(minutes=10)),), con)
     return [
         {"System": "CSMS ERP (students, parents, staff, vehicles, routes)", "Mode": "API" if csms_config(con)["base_url"] else "File import (CSV / Excel / JSON)",
-         "Last": (last_log("CSMS", con) or {}).get("ts", "—"), "State": "Waiting for CSMS API details from DPS IT" if not csms_config(con)["base_url"] else "Configured"},
-        {"System": "Woqod fuel", "Mode": "Statement import (CSV / Excel); API when DPS has access", "Last": (last_log("WOQOD", con) or {}).get("ts", "—"),
+         "Last": (last_log("CSMS", con) or {}).get("ts", "—"), "State": "Waiting for CSMS API details from school IT" if not csms_config(con)["base_url"] else "Configured"},
+        {"System": "Woqod fuel", "Mode": "Statement import (CSV / Excel); API when the school has access", "Last": (last_log("WOQOD", con) or {}).get("ts", "—"),
          "State": "Ready"},
         {"System": "Vehicle tracker (GPS, speed, harsh driving)", "Mode": "REST push to /v1/gps/positions and /v1/telematics/events",
          "Last": lp["t"] or (last_log("GPS", con) or {}).get("ts", "—"), "State": f"Live for {lp['n']} bus(es)" if lp["n"] else "No live feed yet"},

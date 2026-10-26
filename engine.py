@@ -130,7 +130,7 @@ def reset_trips(date, user, role, bus_id=None, trip_no=None, parent_changes=Fals
             for tbl, rows in pc.items():
                 c.executemany(f"DELETE FROM {tbl} WHERE id=?", [(i,) for i in rows])
                 removed_pc += len(rows)
-        if bus_id and date == db.today():     # DPS 360: a bus reset for testing is left to the testers for the rest of the day
+        if bus_id and date == db.today():     # Flexitrack 360: a bus reset for testing is left to the testers for the rest of the day
             import json
             mb = set(json.loads(db.setting("manual_buses", "{}", c) or "{}").get(date, []))
             mb.add(int(bus_id))
@@ -251,7 +251,7 @@ def open_run(bus_id, con=None):
 def start_run(bus_id, date, trip_no, driver_id, supervisor_id, caretaker_id, lat, lon, user, role, device_id, when=None, con=None,
               require_check=False):
     with db.tx(con) as c:
-        if require_check:               # DPS 360: in-app pre-trip vehicle check; a critical defect blocks the start
+        if require_check:               # Flexitrack 360: in-app pre-trip vehicle check; a critical defect blocks the start
             import campus
             okc, why = campus.precheck_status(bus_id, date, c)
             if not okc:

@@ -1,11 +1,11 @@
-"""DPS 360 REST API — for the CSMS ERP, the vehicle tracker, RFID readers, Woqod and other school systems.
+"""Flexitrack 360 REST API — for the CSMS ERP, the vehicle tracker, RFID readers, Woqod and other school systems.
 
 Run next to the web app, on the same database:
     pip install fastapi uvicorn
     SBT_DB=/path/to/school_bus.db uvicorn api:app --host 0.0.0.0 --port 8600
 Interactive documentation: http://<host>:8600/docs  (OpenAPI JSON at /openapi.json)
 
-Every call needs an API key in the `X-API-Key` header. Keys are created in DPS 360 → Setup & data → Integrations, each with scopes:
+Every call needs an API key in the `X-API-Key` header. Keys are created in Flexitrack 360 → Setup & data → Integrations, each with scopes:
 read (look-ups), scan (bus / gate / RFID scans), gps (positions and telematics), fuel (fuel transactions), csms (ERP sync).
 """
 from datetime import datetime
@@ -21,8 +21,8 @@ import fleet
 import integrations as I
 import security_ext as SX
 
-app = FastAPI(title="DPS 360 API", version="1.0",
-              description="Student, transport, gate, fleet and security data for DPS-Modern Indian School. All times are Qatar time "
+app = FastAPI(title="Flexitrack 360 API", version="1.0",
+              description="Student, transport, gate, fleet and security data for the school. All times are Qatar time "
                           "(YYYY-MM-DD HH:MM:SS). Authenticate with the X-API-Key header.")
 
 

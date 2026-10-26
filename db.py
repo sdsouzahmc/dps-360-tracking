@@ -1,4 +1,4 @@
-"""DPS 360 — SQLite data layer: schema, connection helpers, seed entry point and audit log."""
+"""Flexitrack 360 — SQLite data layer: schema, connection helpers, seed entry point and audit log."""
 import hashlib
 import os
 import random

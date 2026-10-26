@@ -1,6 +1,6 @@
-# DPS 360 API and integrations
+# Flexitrack 360 API and integrations
 
-DPS 360 has a REST API (`api.py`, FastAPI). The school's other systems use it to send data in and read data out. It runs next to the web app on the same database:
+Flexitrack 360 has a REST API (`api.py`, FastAPI). The school's other systems use it to send data in and read data out. It runs next to the web app on the same database:
 
 ```
 pip install -r requirements.txt -r requirements-api.txt
@@ -10,7 +10,7 @@ SBT_DB=/data/school_bus.db uvicorn api:app --host 0.0.0.0 --port 8600
 Interactive documentation is at `https://<host>:8600/docs`. The machine-readable spec is `openapi.json` (OpenAPI 3.1).
 
 ## Security
-- **API keys:** every call sends `X-API-Key: <key>`. Keys are created and revoked in DPS 360 → Setup & data → Integrations & API. One key per system, shown once and stored hashed.
+- **API keys:** every call sends `X-API-Key: <key>`. Keys are created and revoked in Flexitrack 360 → Setup & data → Integrations & API. One key per system, shown once and stored hashed.
 - **Scopes:** each key gets only the scopes it needs:
   - `read`: look-ups
   - `scan`: bus, gate and RFID scans
@@ -42,7 +42,7 @@ Interactive documentation is at `https://<host>:8600/docs`. The machine-readable
 
 ## Integration plan per system
 1. **CSMS ERP (students, parents, staff, vehicles, routes, stops).**
-   - DPS 360 pulls from the CSMS API on a schedule (nightly plus on demand) once DPS IT shares the base URL and a key. The settings are in Setup → Integrations → CSMS ERP.
+   - Flexitrack 360 pulls from the CSMS API on a schedule (nightly plus on demand) once DPS IT shares the base URL and a key. The settings are in Setup → Integrations → CSMS ERP.
    - CSMS can also push changes to `POST /v1/csms/sync`.
    - Until then, a CSMS export (CSV, Excel or JSON) is uploaded in the same screen.
    - Changes are always shown as new, changed and missing before anything is written. CSMS stays the master: no data is typed twice.

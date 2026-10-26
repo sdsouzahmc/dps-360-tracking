@@ -1,7 +1,7 @@
 {
  "openapi": "3.1.0",
  "info": {
-  "title": "DPS 360 API",
+  "title": "Flexitrack 360 API",
   "description": "Student, transport, gate, fleet and security data for DPS-Modern Indian School. All times are Qatar time (YYYY-MM-DD HH:MM:SS). Authenticate with the X-API-Key header.",
   "version": "1.0"
  },

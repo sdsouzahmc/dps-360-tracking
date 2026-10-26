@@ -1,4 +1,4 @@
-"""DPS 360 fleet module (DPS requirements: Maintenance & Fuel; vehicle and staff documents):
+"""Flexitrack 360 fleet module (DPS requirements: Maintenance & Fuel; vehicle and staff documents):
 job orders with a Supervisor → Manager → Senior Manager → Vice President approval chain, purchase orders, spare parts / tyres / batteries
 stock, fuel issuance and efficiency, preventive maintenance by km and days, cost history, and a document wallet for buses and crew."""
 import json

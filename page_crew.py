@@ -223,7 +223,7 @@ if not run:
         st.download_button(f"🔒 {t('Download encrypted roster')}", dstore.encrypted_roster(dev_id, payload),
                            file_name=f"{bus['bus_no']}_{today}_roster.enc", help="Encrypted with this device's key — unreadable if the tablet is lost.")
 
-    # DPS 360: in-app vehicle checklist (pre-trip before the first trip, post-trip after the last one)
+    # Flexitrack 360: in-app vehicle checklist (pre-trip before the first trip, post-trip after the last one)
     _pc_ok, _pc_msg = campus.precheck_status(bus_id, today)
     _left_all = [n for n in MYTRIPS if n not in runs_today]
     st.divider()
