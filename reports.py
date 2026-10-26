@@ -527,7 +527,7 @@ def to_pdf(title, definition, filters_text, frame, max_rows=600):
     ss = getSampleStyleSheet()
     small = ss["BodyText"].clone("small", fontSize=7, leading=8.5)
     fresh, pend = freshness()
-    story = [Paragraph(f"{db.SCHOOL_NAME} — {title}", ss["Title"]),
+    story = [Paragraph(f"{db.setting('school_name', db.SCHOOL_NAME)} — {title}", ss["Title"]),
              Paragraph(f"<b>Definition:</b> {definition}", ss["BodyText"]),
              Paragraph(f"<b>Filters:</b> {filters_text} &nbsp; <b>Generated:</b> {db.ts()} &nbsp; <b>Data as of:</b> {fresh}"
                        f" &nbsp; <b>Trips pending sync:</b> {pend}", ss["BodyText"]), Spacer(1, 4 * mm)]

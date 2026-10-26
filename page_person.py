@@ -61,7 +61,7 @@ with left:
                 rows.append({"Trip": f"{n} · {t['short']}", "Bus": db.bus(b)["bus_no"] if b else "—", "Stop": (db.stop(st_) or {}).get("name", "—"),
                              "": "Pickup" if mv[0] == "PICKUP" else "Drop-off"})
             st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
-            st.caption("DPS assigns a bus per session — the morning and afternoon buses can differ.")
+            st.caption("The school assigns a bus per session — the morning and afternoon buses can differ.")
         else:
             st.markdown("🚗 Private transport — tracked at the campus gates.")
         g = db.q("""SELECT g.name, g.relation, g.phone FROM guardians g JOIN student_guardians sg ON sg.guardian_id=g.id WHERE sg.student_id=?""", (sid,))

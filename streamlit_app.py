@@ -1,4 +1,4 @@
-"""DPS 360 · powered by AutoTrace — 360-degree student tracking for DPS: buses (per-session bus assignment), campus gates, visitors,
+"""Flexitrack 360 · powered by AutoTrace — 360-degree student tracking for DPS: buses (per-session bus assignment), campus gates, visitors,
 staff, class attendance, early pickup, vehicle checks and security patrols in one command-centre dashboard (English / Arabic)."""
 import os
 import random
@@ -8,7 +8,7 @@ import streamlit as st
 import db
 from i18n import rtl_css, t
 
-st.set_page_config(page_title="DPS 360", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Flexitrack 360", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 
@@ -16,7 +16,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 @st.cache_resource(show_spinner=False)
 def _boot():
     """First run: build the DPS-scale demo (≈4,800 students, 100 buses, last school days + today so far)."""
-    with st.spinner("Preparing the DPS 360 demo campus (first start only, about 20 seconds)…"):
+    with st.spinner("Preparing the Flexitrack 360 demo campus (first start only, about 20 seconds)…"):
         db.init_db()
         db.seed_extras()
         import planner
@@ -131,7 +131,7 @@ def login():
     st.markdown("<div style='display:flex;align-items:center;gap:14px;margin-bottom:4px'>"
                 "<div style='width:58px;height:58px;border-radius:16px;background:linear-gradient(135deg,#1B2559,#3D4FD6);display:flex;"
                 "align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:1.25rem;letter-spacing:-.03em'>360</div>"
-                "<div><div style='font-size:2.2rem;font-weight:800;letter-spacing:-0.02em;color:#1B2559;line-height:1.1'>DPS <span style='color:#3D4FD6'>360</span></div>"
+                "<div><div style='font-size:2.2rem;font-weight:800;letter-spacing:-0.02em;color:#1B2559;line-height:1.1'>Flexitrack <span style='color:#3D4FD6'>360</span></div>"
                 "<div style='font-size:.95rem;color:#6B7390;font-weight:600'>Student safety &amp; tracking · powered by "
                 "<b style='color:#1B2559'>Auto</b><b style='color:#3D4FD6'>Trace</b></div></div></div>", unsafe_allow_html=True)
     st.caption(db.setting("school_name", db.SCHOOL_NAME))
@@ -213,7 +213,7 @@ role = user["role"]
 
 st.logo(os.path.join(BASE, "dps360_logo.svg"), size="large", icon_image=os.path.join(BASE, "dps360_icon.svg"))
 with st.sidebar:
-    st.markdown("<div class='brand-sub'>DPS 360 · powered by AutoTrace · " + db.setting("school_name", db.SCHOOL_NAME) + "</div>", unsafe_allow_html=True)
+    st.markdown("<div class='brand-sub'>Flexitrack 360 · powered by AutoTrace · " + db.setting("school_name", db.SCHOOL_NAME) + "</div>", unsafe_allow_html=True)
     st.markdown(f"**{user['display_name']}**  \n<span class='muted'>{ {'vp': 'Vice President', 'fleet_supervisor': 'Fleet supervisor', 'senior_manager': 'Senior Manager'}.get(role, role.title())} · {user['username']}</span>", unsafe_allow_html=True)
     lang = st.radio(t("Language"), ["English", "العربية"], horizontal=True, index=1 if st.session_state.get("lang") == "ar" else 0)
     if (lang == "العربية") != (st.session_state.get("lang") == "ar"):

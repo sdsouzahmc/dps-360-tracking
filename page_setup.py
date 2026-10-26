@@ -25,7 +25,7 @@ if "su_last" in st.session_state:
     lv, m = st.session_state.pop("su_last")
     msg(lv, m)
 
-tabs = st.tabs(["Data source", "Students", "Badges & ID cards", "Buses & crew", "Stops", "CSV import", "Devices", "Users", "Backup", "Demo tools", "Reset trip data", "Test resets", "Integrations & API"])
+tabs = st.tabs(["School & data source", "Students", "Badges & ID cards", "Buses & crew", "Stops", "CSV import", "Devices", "Users", "Backup", "Demo tools", "Reset trip data", "Test resets", "Integrations & API"])
 
 
 def new_badge(sid, code):
@@ -44,7 +44,7 @@ with tabs[0]:
     st.caption(f"{k['s']} students · {k['b']} buses · {k['t']} trips · {k['e']} scan events · trip dates {k['d1'] or '—'} to {k['d2'] or '—'}")
     with st.form("school_name_form", border=False):
         cN1, cN2 = st.columns([3, 1], vertical_alignment="bottom")
-        nm = cN1.text_input("School name (shown on dashboard, sidebar and ID cards)", value=db.setting("school_name", db.SCHOOL_NAME),
+        nm = cN1.text_input("School name (shown on the login page, dashboard, sidebar, reports, passes and ID cards)", value=db.setting("school_name", db.SCHOOL_NAME),
                             disabled=role != "admin")
         if cN2.form_submit_button("Save name", disabled=role != "admin") and nm.strip():
             db.set_setting("school_name", nm.strip())
@@ -55,18 +55,18 @@ with tabs[0]:
     else:
         st.warning("Regenerating replaces everything in the database (trips, scans, users). Download a backup first if needed.")
         with st.container(border=True):
-            st.markdown("**DPS-scale demo** — about 4,800 students (KG, main school, stay-back, afternoon shift), 100 buses, 160 classes, "
+            st.markdown("**Full-scale demo** — about 4,800 students (KG, main school, stay-back, afternoon shift), 100 buses, 160 classes, "
                         "gates, visitors and patrols; the last school days plus today up to now.")
-            if st.button("Regenerate the DPS demo (about 20 s)"):
+            if st.button("Regenerate the demo (about 20 s)"):
                 with st.spinner("Generating…"):
                     db.init_db(reset=True)
-                st.session_state.su_last = ("ok", "DPS demo regenerated.")
+                st.session_state.su_last = ("ok", "Demo regenerated.")
                 st.rerun()
         with st.container(border=True):
             st.markdown("**Parent app policy**")
             st.toggle("Show the live bus location to parents", value=db.setting("parent_bus_location", "0") == "1", key="pbl",
                       on_change=lambda: db.set_setting("parent_bus_location", "1" if st.session_state.pbl else "0"),
-                      help="DPS asked that parents see campus entry and exit times only.")
+                      help="The school asked that parents see campus entry and exit times only.")
 # ------------------------------------------------------------------ students
 with tabs[1]:
     q_ = st.text_input("Search student (name, ID or class e.g. Grade 5-A)")
@@ -157,7 +157,7 @@ with tabs[2]:
         _sel = st.multiselect("Buses (empty = all)", [b_["bus_no"] for b_ in _bl], key="rt_sel")
         st.download_button("⬇ Rear-door tags (PDF)", qr_utils.rear_tags_pdf([b_ for b_ in _bl if not _sel or b_["bus_no"] in _sel],
                                                                           db.setting("school_name", db.SCHOOL_NAME)),
-                           "DPS360_rear_door_tags.pdf", "application/pdf", key="rt_dl")
+                           "Flexitrack360_rear_door_tags.pdf", "application/pdf", key="rt_dl")
     q2 = st.text_input("Find student", key="bq")
     rows = db.q("""SELECT s.id, s.code, s.name, b.code AS badge, b.status FROM students s LEFT JOIN badges b ON b.student_id=s.id AND b.status='ACTIVE'
                    WHERE s.name LIKE ? OR s.code LIKE ? ORDER BY s.code LIMIT 200""", (f"%{q2}%", f"%{q2}%"))
@@ -488,7 +488,7 @@ with tabs[10]:
                 st.rerun()
 
 
-# ------------------------------------------------------------------ test resets (DPS 360)
+# ------------------------------------------------------------------ test resets (Flexitrack 360)
 with tabs[11]:
     import campus as _cp
     import dps_data as _dd
@@ -647,7 +647,7 @@ with tabs[11]:
                     st.session_state.tr_msg = ("ok", "Today starts from zero — only students enrolled are counted. Use 'Rebuild today' to bring the "
                                                "simulated day back." if mode_ == "zero" else "Today rebuilt up to now.")
                     st.rerun()
-                st.caption("Everything from scratch (all days, all data): Data source tab → Regenerate the DPS demo.")
+                st.caption("Everything from scratch (all days, all data): Data source tab → Regenerate the demo.")
 
 
 with tabs[12]:
@@ -656,7 +656,7 @@ with tabs[12]:
     if role not in ("admin", "manager"):
         st.info("Only the administrator or transport lead can manage integrations.")
     else:
-        st.markdown("**Connections to other systems.** DPS 360 exposes a REST API (run `api.py` next to the app; documentation at `/docs`). "
+        st.markdown("**Connections to other systems.** Flexitrack 360 exposes a REST API (run `api.py` next to the app; documentation at `/docs`). "
                     "The CSMS ERP, the vehicle tracker, RFID readers and Woqod push to it or are imported here.")
         st.dataframe(pd.DataFrame(I.status()), hide_index=True, width="stretch")
         it = st.segmented_control("Section", ["API keys", "CSMS ERP", "Woqod fuel", "Vehicle tracker", "RFID readers", "Scan speed"], default="API keys",
@@ -688,8 +688,8 @@ with tabs[12]:
                            "/v1/gps/positions, /v1/telematics/events, /v1/fuel/transactions, /v1/csms/sync.")
             elif it == "CSMS ERP":
                 cfg = I.csms_config()
-                st.caption("Students, parents, staff, vehicles, routes and stops come from CSMS so nobody types them twice. Until DPS IT shares the CSMS "
-                           "API, upload a CSMS export here: DPS 360 shows exactly what would change before anything is written.")
+                st.caption("Students, parents, staff, vehicles, routes and stops come from CSMS so nobody types them twice. Until school IT shares the CSMS "
+                           "API, upload a CSMS export here: Flexitrack 360 shows exactly what would change before anything is written.")
                 a_, b_ = st.columns(2)
                 cu = a_.text_input("CSMS API base URL", value=cfg["base_url"], placeholder="https://csms.dpsmisdoha.com/api", key="cs_u")
                 ck = b_.text_input("CSMS API key", type="password", placeholder="(stored)" if cfg["has_key"] else "", key="cs_k")
@@ -718,7 +718,7 @@ with tabs[12]:
                     U.kpis([("NEW", len(d_["new"]), f"{ent} to add", "#2E9E5B", "green"), ("CHANGED", len(d_["changed"]), "fields to update", "#3D4FD6", ""),
                             ("NOT IN CSMS", len(d_["missing"]), "kept unless you deactivate", "#E07A1F", "")], n=3)
                     if d_["changed"]:
-                        st.dataframe(pd.DataFrame([{"Key": c_["key"], "Field": f_, "DPS 360": v[0], "CSMS": v[1]} for c_ in d_["changed"][:300]
+                        st.dataframe(pd.DataFrame([{"Key": c_["key"], "Field": f_, "Flexitrack 360": v[0], "CSMS": v[1]} for c_ in d_["changed"][:300]
                                                    for f_, v in c_["changes"].items()]), hide_index=True, width="stretch", height=220)
                     if d_["new"]:
                         st.dataframe(pd.DataFrame(d_["new"][:300]), hide_index=True, width="stretch", height=180)
@@ -731,7 +731,7 @@ with tabs[12]:
                            "employee_id, designation, mobile, department; vehicle_no, plate_no, seats, route.")
             elif it == "Woqod fuel":
                 st.caption("Upload the monthly / weekly Woqod fuel-card statement. Lines are matched to buses by plate or card number; lines already "
-                           "imported (same transaction id) are skipped; suspicious fills are flagged in Fleet → Fuel. When DPS gets Woqod API access, "
+                           "imported (same transaction id) are skipped; suspicious fills are flagged in Fleet → Fuel. When the school gets Woqod API access, "
                            "the same import runs automatically through POST /v1/fuel/transactions.")
                 st.download_button("Statement template (CSV)", pd.DataFrame(I.woqod_template()).to_csv(index=False).encode(), "woqod_statement_template.csv",
                                    "text/csv", key="wq_t")
@@ -784,7 +784,7 @@ with tabs[12]:
                     a1, a2 = [x_.strip() for x_ in tu.split("|", 1)]
                     st.json(I.rfid_scan(a1, a2))
             elif it == "Scan speed":
-                st.caption("DPS IT asked how fast the bus and gate points register a scan. Every scan is timed from the read to the result on screen "
+                st.caption("school IT asked how fast the bus and gate points register a scan. Every scan is timed from the read to the result on screen "
                            "(server side).")
                 a_, b_ = st.columns(2)
                 f_ = a_.date_input("From", value=pd.Timestamp(db.today()) - pd.Timedelta(days=7), key="ss_f")

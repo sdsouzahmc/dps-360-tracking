@@ -1,4 +1,4 @@
-"""DPS 360 campus layer: gates and card scans, visitors, staff, class attendance, early pickup, campus alerts,
+"""Flexitrack 360 campus layer: gates and card scans, visitors, staff, class attendance, early pickup, campus alerts,
 vehicle checklists, security patrol rounds and the per-trip bus assignment board.
 
 Everything a person does on campus ends up in one stream (view campus_moves): bus hand-overs at the bus bay,
@@ -506,7 +506,7 @@ def gate_scan(code, gate_id, operator, direction=None, method="CARD", when=None,
 
         if not hit:
             log("UNKNOWN", None, direction or "IN", "REJECTED", "Unknown card")
-            return {"ok": False, "level": "error", "message": f"Unknown card {code} — not a DPS student, staff or visitor pass."}
+            return {"ok": False, "level": "error", "message": f"Unknown card {code} — not a student, staff or visitor pass."}
         if hit["card_status"] == "REVOKED":
             log(hit["type"], hit["id"], direction or "IN", "REJECTED", "Revoked card")
             raise_alert("CARD_REJECTED", "MEDIUM", f"Revoked card {code} ({hit['name']}) used at gate", date, hit["id"], when=when, con=c)

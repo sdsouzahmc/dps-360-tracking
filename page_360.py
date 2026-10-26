@@ -1,4 +1,4 @@
-"""DPS 360 Command centre: every student, bus, gate, visitor, class and safety check on one live screen."""
+"""Flexitrack 360 Command centre: every student, bus, gate, visitor, class and safety check on one live screen."""
 from collections import Counter
 from datetime import datetime, timedelta
 
@@ -37,7 +37,7 @@ def hero(D=None):
             f"<div class='sess'>🚌 Trip {n} · {t['short']} · {t['window'][0]}–{t['window'][1]} · {'running now' if state == 'running' else 'next'}</div>")
     clock = (f"<b>{day:%d %b}</b>{day:%A %Y}" if past else f"<b>{now:%H:%M}</b>{now:%A %d %b %Y}")
     st.markdown(
-        f"<div class='hero'><div><div class='ttl'>DPS 360 Command Centre</div>"
+        f"<div class='hero'><div><div class='ttl'>Flexitrack 360 Command Centre</div>"
         f"<div class='sub'>{db.setting('school_name', db.SCHOOL_NAME)} · students, buses, gates, classes and safety in one view</div>{sess}</div>"
         f"<div class='clock'>{clock}" + (f"<div class='sess'>⏱ demo clock</div>" if abs(off) > 60 and not past else "") + "</div></div>",
         unsafe_allow_html=True)
@@ -257,7 +257,7 @@ def board(D=None):
                 pts.append({"lat": e["lat"], "lon": e["lon"], "label": f"{busno[r['bus_id']]} · Trip {r['trip_no']} · {onb.get(r['id'], 0)} on board",
                             "bus": busno[r["bus_id"]][4:]})
         lat, lon = db.school_pos()
-        layers = [pdk.Layer("ScatterplotLayer", pd.DataFrame([{"lat": lat, "lon": lon, "label": "DPS campus"}]), get_position="[lon, lat]",
+        layers = [pdk.Layer("ScatterplotLayer", pd.DataFrame([{"lat": lat, "lon": lon, "label": "School campus"}]), get_position="[lon, lat]",
                             get_radius=260, get_fill_color=[217, 48, 37, 200], pickable=True)]
         if pts:
             df = pd.DataFrame(pts)
