@@ -1,4 +1,4 @@
-"""DPS 360 extensions: security (bus inspection, blacklist, gate passes, collectors), fleet (job orders, approvals, POs, fuel, services,
+"""Flexitrack 360 extensions: security (bus inspection, blacklist, gate passes, collectors), fleet (job orders, approvals, POs, fuel, services,
 documents), integrations (CSMS, Woqod, GPS / telematics, RFID) and the REST API.
 
 Run:  python -m pytest -q tests/test_extensions.py"""

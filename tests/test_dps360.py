@@ -1,4 +1,4 @@
-"""DPS 360 automated function tests (pytest).
+"""Flexitrack 360 automated function tests (pytest).
 
 Run from the app folder:  python -m pytest -q tests/test_dps360.py
 A fresh demo database is generated once for the session (about 20 s) in a temp folder."""
